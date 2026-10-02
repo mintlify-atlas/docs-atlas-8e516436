@@ -1,7 +1,7 @@
 ---
 title: "Common Scripts Pack: Built-in XSOAR Utility Functions"
 sidebarTitle: "Common Scripts"
-description: "The Common Scripts Pack ships 295+ utility scripts for data manipulation, indicator handling, incident management, and output formatting included with every XSOAR installation."
+description: "The Common Scripts Pack ships 295+ utility scripts for data transformation, indicator handling, and incident management, bundled with every XSOAR platform."
 ---
 
 The `Common Scripts` Pack (`Packs/CommonScripts`) is the standard library of Cortex XSOAR automation. Authored and maintained by the Cortex XSOAR team and tagged as a `Core` pack, it ships pre-installed on every XSOAR deployment and is available across all supported marketplaces — `xsoar`, `marketplacev2`, `xpanse`, and `platform`. With over 295 scripts spanning data transformation, indicator utilities, incident management, file handling, and more, it is the first place to look before writing any custom automation.
@@ -86,21 +86,21 @@ These scripts reformat, encode, parse, or calculate values from raw data. They a
 | `Base64Encode` | JavaScript | Encodes an input string to Base64 format. Writes the result to `Base64.encoded`. |
 | `Base64EncodeV2` | Python 3 | Python reimplementation of `Base64Encode`. Accepts a single `input` argument and writes to `Base64.encoded`. Use this for new playbooks. |
 | `ArrayToCSV` | Python 3 | Converts a simple array (list of strings) to a comma-separated string. Tagged as a `transformer`. |
-| `CEFParser` | Python | Parses a CEF (Common Event Format) log string into structured key-value fields suitable for context mapping. |
+| `CEFParser` | JavaScript | Parses a CEF (Common Event Format) log string into structured key-value fields suitable for context mapping. |
 | `CalculateEntropy` | Python 3 | Computes Shannon entropy for a given string. Useful for detecting high-entropy (obfuscated or encoded) values in command lines or file names. Accepts `data` and `minimum_entropy` arguments; writes to `EntropyResult`. |
 | `CalculateTimeDifference` | JavaScript | Calculates the difference between two timestamps in minutes. Writes `Time.Difference`, `Time.Start`, and `Time.End` to context. |
-| `ConvertTableToHTML` | Python | Renders a context table as an HTML string for embedding in email or layout widgets. |
-| `ConvertXmlToJson` | Python | Parses an XML string and converts it to a JSON-compatible dictionary. |
+| `ConvertTableToHTML` | JavaScript | Renders a context table as an HTML string for embedding in email or layout widgets. |
+| `ConvertXmlToJson` | JavaScript | Parses an XML string and converts it to a JSON-compatible dictionary. |
 | `ConvertDateToUTC` | Python | Normalises a date string from a given timezone to UTC. |
 | `DecodeMimeHeader` | Python | Decodes MIME-encoded email header values (e.g. RFC 2047 `=?utf-8?B?...?=` strings). |
 | `FormatURL` | Python | Normalises and defangs or refangs URLs for consistent comparison and storage. |
 | `JSONtoCSV` | Python | Converts a JSON array of objects to a CSV file entry. |
-| `MapValues` | Python | Maps input values to output values using a provided mapping table — useful for normalising vendor-specific status codes to standard values. |
-| `MatchRegex` | Python | Tests a string against a regular expression and returns match groups. |
+| `MapValues` | JavaScript | Maps input values to output values using a provided mapping table — useful for normalising vendor-specific status codes to standard values. |
+| `MatchRegex` | JavaScript | Tests a string against a regular expression and returns match groups. |
 | `PrettyPrint` | Python | Pretty-prints a JSON or Python object for human-readable war-room display. |
-| `StringReplace` | Python | Replaces all occurrences of a substring within a string. |
+| `StringReplace` | JavaScript | Replaces all occurrences of a substring within a string. |
 | `TextFromHTML` | Python | Strips HTML tags and returns the plain-text content of an HTML string. |
-| `UnEscapeURLs` | Python | Unescapes URL-encoded or safety-wrapped (e.g. ProofPoint, Mimecast) URLs to their original form. |
+| `UnEscapeURLs` | JavaScript | Unescapes URL-encoded or safety-wrapped (e.g. ProofPoint, Mimecast) URLs to their original form. |
 
 </Accordion>
 
@@ -117,7 +117,7 @@ These scripts create, update, link, or close incidents, assign owners, and manag
 | `CloseInvestigationAsDuplicate` | Python | Closes the current incident as a duplicate and links it to a specified parent investigation. |
 | `CopyNotesToIncident` | Python | Copies note entries from the current incident to a target incident by ID. |
 | `FindSimilarIncidentsV2` | Python | Queries XSOAR for incidents that share indicator values or field text with the current incident, enabling deduplication and correlation. |
-| `IncreaseIncidentSeverity` | Python | Raises incident severity by one level (e.g. Low → Medium) if a condition is met. |
+| `IncreaseIncidentSeverity` | JavaScript | Raises incident severity by one level (e.g. Low → Medium) if a condition is met. |
 | `LinkIncidentsButton` | Python | Provides a one-click layout button to link two incidents together. |
 | `SearchIncidentsV2` | Python | Executes an XSOAR incident query and returns matching incidents. |
 | `SetGridField` | Python | Populates an XSOAR grid-type incident field with a list of records. |
@@ -135,9 +135,9 @@ These scripts work with security indicators — computing reputation scores, han
 | `CVECVSSColor` | Python | Returns a CSS colour string (e.g. `red`, `orange`, `yellow`) corresponding to a CVSS score, used in incident layout widgets to provide at-a-glance severity colouring. |
 | `CVSSCalculator` | Python 3 | Full CVSS 3.0 / 3.1 calculator. Accepts all base, temporal, and environmental metric arguments and writes `CVSS.BaseScore`, `CVSS.TemporalScore`, `CVSS.EnvironmentalScore`, `CVSS.VectorString`, and related sub-scores to context. |
 | `GetIndicatorDBotScore` | Python | Retrieves the current DBotScore for an indicator from the XSOAR threat-intelligence store. |
-| `IsMaliciousIndicatorFound` | Python | Returns `yes` or `no` based on whether any indicator in context has a DBotScore ≥ 3 (malicious). |
-| `IsIPInRanges` | Python | Checks whether an IP address falls within any of a provided list of CIDR ranges. |
-| `IsIPPrivate` | Python | Returns `yes` if an IP address is in RFC 1918 or other private-use ranges. |
+| `IsMaliciousIndicatorFound` | JavaScript | Returns `yes` or `no` based on whether any indicator in context has a DBotScore ≥ 3 (malicious). |
+| `IsIPInRanges` | JavaScript | Checks whether an IP address falls within any of a provided list of CIDR ranges. |
+| `IsIPPrivate` | JavaScript | Returns `yes` if an IP address is in RFC 1918 or other private-use ranges. |
 | `IsDomainInternal` | Python | Checks a domain against a configured list of internal domain suffixes. |
 | `ExtractDomainAndFQDNFromUrlAndEmail` | Python | Parses URLs and email addresses to extract the domain and fully qualified domain name components. |
 | `IndicatorMaliciousRatioCalculation` | Python | Computes the ratio of malicious to total detections for an indicator across all returned DBotScore entries. |
@@ -155,21 +155,21 @@ General-purpose utility scripts for context management, value comparison, list o
 | `AreValuesEqual` | JavaScript | Compares two values for equality. Returns a `yes` or `no` context path used to branch condition tasks. Handles missing arguments gracefully (returns `no`). |
 | `AnalyzeTimestampIntervals` | Python | Analyses a list of timestamps and computes statistical properties of the intervals — mean, standard deviation, and outlier detection — useful in impossible-traveller and beaconing detection playbooks. |
 | `AddKeyToList` | Python 3 | Adds or replaces a key in an XSOAR list (key/value store). Supports append mode and duplicate prevention. |
-| `Set` | Python | Sets a key-value pair directly in the incident context. The most commonly used utility script for writing computed values. |
+| `Set` | JavaScript | Sets a key-value pair directly in the incident context. The most commonly used utility script for writing computed values. |
 | `SetMultipleValues` | Python | Sets multiple context key-value pairs in a single task. |
-| `DeleteContext` | Python | Removes one or all keys from the incident context. |
+| `DeleteContext` | JavaScript | Removes one or all keys from the incident context. |
 | `CheckContextValue` | Python | Verifies that a context key exists and optionally matches a given value. Returns a boolean suitable for condition branching. |
-| `GetTime` | Python | Returns the current UTC timestamp in a configurable format. |
-| `Sleep` | Python | Pauses playbook execution for a specified number of seconds. |
-| `IsIntegrationAvailable` | Python | Returns `yes` if a named integration brand has at least one enabled instance. Used to gate tasks that require a specific integration. |
+| `GetTime` | JavaScript | Returns the current UTC timestamp in a configurable format. |
+| `Sleep` | JavaScript | Pauses playbook execution for a specified number of seconds. |
+| `IsIntegrationAvailable` | JavaScript | Returns `yes` if a named integration brand has at least one enabled instance. Used to gate tasks that require a specific integration. |
 | `GetEnabledInstances` | Python | Returns a list of all currently enabled integration instances and their brands. |
 | `GetErrorsFromEntry` | Python | Extracts the error message text from a war-room entry returned by a failed command. |
-| `IsError` | Python | Returns `true` if the provided entry is an error entry. Used in condition tasks to detect upstream failures. |
+| `IsError` | JavaScript | Returns `true` if the provided entry is an error entry. Used in condition tasks to detect upstream failures. |
 | `CompareLists` | Python | Computes the intersection, difference, and union of two lists. |
 | `FilterByList` | Python | Filters an array, returning only elements that appear (or do not appear) in a reference XSOAR list. |
-| `ExportToCSV` | Python | Writes a list of dictionaries to a CSV file entry in the war room and incident files. |
+| `ExportToCSV` | JavaScript | Writes a list of dictionaries to a CSV file entry in the war room and incident files. |
 | `GeneratePassword` | Python | Generates a cryptographically random password of configurable length and complexity. |
-| `Exists` | Python | Returns `yes` if a context path is non-empty, `no` otherwise. Cleaner than checking `isExists` in every condition. |
+| `Exists` | JavaScript | Returns `yes` if a context path is non-empty, `no` otherwise. Cleaner than checking `isExists` in every condition. |
 | `PrintContext` | Python | Prints the entire current incident context as a formatted war-room note — useful for debugging playbooks. |
 | `DemistoVersion` | Python | Returns the running XSOAR platform version string. Useful in playbooks that conditionally use features introduced in specific versions. |
 

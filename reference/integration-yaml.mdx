@@ -1,7 +1,7 @@
 ---
 title: "Integration YAML Schema Reference for Cortex XSOAR"
 sidebarTitle: "Integration YAML"
-description: "Complete schema reference for the Cortex XSOAR integration YAML configuration file — covering top-level fields, script block, parameters, commands, arguments, and outputs."
+description: "Schema reference for XSOAR integration YAML — top-level fields, configuration parameters, script block, commands, arguments, and output definitions."
 ---
 
 Every Cortex XSOAR integration is described by a YAML configuration file that lives alongside the Python implementation file in the integration's directory (e.g., `Packs/CortexXDR/Integrations/CortexXDRIR/CortexXDRIR.yml`). This file tells the XSOAR platform how to render the configuration UI, which commands the integration exposes, what arguments each command accepts, and what context data each command produces. The YAML is the authoritative contract between the integration developer and the platform.
@@ -101,11 +101,11 @@ configuration:
   | `4` | Encrypted / password input (stored encrypted) | `str` |
   | `8` | Boolean checkbox | `bool` |
   | `9` | Authentication credential pair (username + password) | `dict` with `identifier` and `password` keys |
-  | `12` | Single-select dropdown | `str` |
+  | `12` | Long text area (multi-line input) | `str` |
   | `13` | Incident type selector | `str` |
   | `15` | Single-select dropdown with `options` list | `str` |
   | `16` | Multi-select dropdown with `options` list | `list[str]` |
-  | `17` | Short text (expiration) | `str` |
+  | `17` | Feed expiration policy selector | `str` |
   | `19` | Fetch interval (numeric minutes) | `str` |
 </ParamField>
 

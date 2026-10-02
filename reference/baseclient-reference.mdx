@@ -1,7 +1,7 @@
 ---
-title: "BaseClient Class Reference for Cortex XSOAR HTTP Integrations"
+title: "BaseClient Reference for Cortex XSOAR Integrations"
 sidebarTitle: "BaseClient"
-description: "Full API reference for the CommonServerPython BaseClient class — constructor parameters, _http_request() method signature, and usage patterns for HTTP-based integrations."
+description: "API reference for BaseClient in CommonServerPython — constructor parameters, _http_request() signature, retry logic, and HTTP integration patterns."
 ---
 
 `BaseClient` is the standard HTTP client base class provided by CommonServerPython. Every HTTP-based XSOAR integration should subclass `BaseClient` rather than making raw `requests` calls. The class manages SSL verification, proxy routing, automatic retries with exponential backoff, execution metrics collection, and time-sensitive command deadlines transparently.

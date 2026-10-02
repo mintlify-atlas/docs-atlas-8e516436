@@ -1,7 +1,7 @@
 ---
-title: "DBotScore: Standardized Threat Intelligence Indicator Scoring"
+title: "DBotScore: Standardized Indicator Reputation Scoring"
 sidebarTitle: "DBotScore"
-description: "DBotScore is the XSOAR standard for rating indicator reputation. Integrations return scores of 0-3 (Unknown/Good/Suspicious/Bad) using the Common.Indicator classes from CommonServerPython."
+description: "DBotScore standardizes indicator scoring in XSOAR with values 0-3 (Unknown to Bad). Reliability grades A++ to F determine how vendor verdicts are weighted."
 ---
 
 Every threat intelligence integration in Cortex XSOAR reports indicator reputation using a shared scoring standard called **DBotScore**. Whether an integration queries VirusTotal, a custom threat feed, or an internal lookup service, the score it returns is always expressed in the same four-value scale. This uniformity lets XSOAR aggregate scores from multiple vendors, display a consistent reputation badge in the war room, and apply playbook logic that works regardless of which vendor produced the score.
@@ -74,7 +74,7 @@ When a `CommandResults` object is returned with an `indicator`, XSOAR writes the
 
 The full context path with deduplication expression (from the source) is:
 
-```
+```text
 DBotScore(val.Indicator && val.Indicator == obj.Indicator && val.Vendor == obj.Vendor && val.Type == obj.Type)
 ```
 
@@ -305,7 +305,9 @@ When multiple integrations score the same indicator, XSOAR aggregates the scores
 ```python
 # VirusTotal scores 1.2.3.4 as BAD with reliability A
 # InternalScript scores 1.2.3.4 as GOOD with reliability A++
-# XSOAR shows: BAD (from VirusTotal), GOOD (from InternalScript)
-# The indicator widget shows the A++ result (InternalScript GOOD)
-# because A++ outweighs A in the reliability scale
+# XSOAR stores one DBotScore entry per (Indicator, Vendor, Type) triple:
+#   DBotScore from VirusTotal  -> BAD  (reliability A)
+#   DBotScore from InternalScript -> GOOD (reliability A++)
+# The overall indicator reputation shown to analysts reflects the
+# highest score (BAD) unless overridden by your playbook logic.
 ```

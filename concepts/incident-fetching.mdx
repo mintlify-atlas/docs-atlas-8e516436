@@ -1,7 +1,7 @@
 ---
-title: "Incident Fetching: Pulling Alerts into Cortex XSOAR Automatically"
+title: "Incident Fetching: Pulling Alerts into XSOAR Automatically"
 sidebarTitle: "Incident Fetching"
-description: "Configure a Cortex XSOAR integration to fetch incidents from an external product by implementing the fetch-incidents command and setting isFetch in the YAML configuration."
+description: "How to implement fetch-incidents in XSOAR using demisto.getLastRun, setLastRun to track state, and demisto.incidents to deliver alerts to the platform."
 ---
 
 Cortex XSOAR can continuously pull alerts, events, and cases from external products and automatically create XSOAR incidents from them. This is called **incident fetching**. Instead of requiring an analyst to manually trigger enrichment, a fetch-enabled integration runs on a configurable schedule, queries the external API for anything new since the last run, and hands the results to XSOAR as native incidents that can trigger playbooks, fire notifications, and appear on dashboards.
@@ -141,8 +141,8 @@ def fetch_incidents(
     demisto.incidents(incidents)
 
 
-def convert_severity(vendor_severity: str) -> int:
-    """Map vendor severity strings to XSOAR severity integers (0–4)."""
+def convert_severity(vendor_severity: str) -> float:
+    """Map vendor severity strings to XSOAR IncidentSeverity values (0, 0.5, 1–4)."""
     mapping = {
         'informational': IncidentSeverity.INFO,
         'low':           IncidentSeverity.LOW,
@@ -164,7 +164,7 @@ Always call `demisto.setLastRun()` **before** `demisto.incidents()` in a success
 | `name` | `str` | ✅ | Human-readable incident title shown in the incidents list |
 | `occurred` | `str` | ✅ | ISO 8601 timestamp (`2024-01-15T14:30:00Z`) |
 | `rawJSON` | `str` | ✅ | Full event serialized as a JSON string; XSOAR parses this into incident fields |
-| `severity` | `int` | — | `0` Unknown, `1` Info, `2` Low, `3` Medium, `4` High, `5` Critical |
+| `severity` | `int` or `float` | — | `0` Unknown, `0.5` Info, `1` Low, `2` Medium, `3` High, `4` Critical (matches `IncidentSeverity` constants) |
 | `type` | `str` | — | Maps to an XSOAR incident type; triggers the appropriate playbook |
 | `details` | `str` | — | Additional free-text description |
 | `labels` | `list[dict]` | — | List of `{'type': ..., 'value': ...}` tag objects |

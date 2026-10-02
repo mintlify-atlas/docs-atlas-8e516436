@@ -1,7 +1,7 @@
 ---
-title: "Writing Cortex XSOAR Integration Python Code"
+title: "Writing Cortex XSOAR Integration Python Code Files"
 sidebarTitle: "Python Code"
-description: "Every XSOAR integration follows a standard Python pattern: import runtime modules, define a Client class, implement command functions, and dispatch in main()."
+description: "XSOAR integrations follow a standard Python pattern: import runtime modules, define a Client class, implement command functions, and dispatch in main()."
 ---
 
 Every Cortex XSOAR integration Python file follows the same structure. Understanding this structure lets you read any integration in the content repository and write your own with confidence. The pattern is deliberately simple: imports at the top, a `Client` class for HTTP communication, one function per command, and a `main()` function that reads the current command name and dispatches to the right handler.

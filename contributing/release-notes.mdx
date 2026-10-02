@@ -1,7 +1,7 @@
 ---
 title: "Writing Release Notes for Cortex XSOAR Content Packs"
 sidebarTitle: "Release Notes"
-description: "Every change to a Cortex XSOAR Pack requires a release notes entry in the ReleaseNotes directory. Learn the format, versioning rules, and how the demisto-sdk generates them."
+description: "Every Cortex XSOAR Pack change requires a release notes file. Learn naming conventions, versioning rules, and the demisto-sdk update-release-notes command."
 ---
 
 The Cortex XSOAR Marketplace tracks every Pack as a versioned artifact. When a user installs or upgrades a Pack, the platform surfaces the release notes to explain what changed. This means that every change to content — a new command, a fixed bug in a playbook, an updated Docker image — must be accompanied by a release notes entry that describes the change in plain language. CI validation will block any PR that modifies content without a corresponding release notes file.

@@ -1,7 +1,7 @@
 ---
-title: "Docker Images in Cortex XSOAR: Managing Integration Dependencies"
+title: "Docker Images in Cortex XSOAR: Integration Dependencies"
 sidebarTitle: "Docker Images"
-description: "Cortex XSOAR runs every integration and script in an isolated Docker container. The Docker image is specified in the integration YAML and determines available Python packages."
+description: "Every XSOAR integration runs in an isolated Docker container. Set dockerimage in the YAML to pin a demisto/ image and control Python package dependencies."
 ---
 
 Every integration and script in Cortex XSOAR runs inside a dedicated, isolated Docker container. This architecture means that two integrations can depend on completely different — or even conflicting — versions of the same Python package without interfering with each other. The container is spun up fresh for each command execution and torn down when the command finishes, so integrations are truly stateless and dependency-isolated by design.

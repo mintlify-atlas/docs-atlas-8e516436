@@ -1,7 +1,7 @@
 ---
 title: "CommandResults Class Reference for Cortex XSOAR Output"
 sidebarTitle: "CommandResults"
-description: "Full API reference for CommandResults — the standard return object for all XSOAR commands. Documents every constructor parameter and return_results() usage."
+description: "API reference for CommandResults — the standard return object for XSOAR commands. Covers every constructor parameter, return_results(), and usage examples."
 ---
 
 `CommandResults` is the standard object used to return data from every XSOAR command. It carries machine-readable context data, a human-readable markdown string for the War Room, the raw API response, indicator objects, entity relationships, and scheduling metadata — all in a single, structured return value. You should always use `CommandResults` in combination with `return_results()` rather than calling `demisto.results()` directly.

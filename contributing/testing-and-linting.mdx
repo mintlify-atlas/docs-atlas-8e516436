@@ -70,7 +70,7 @@ The repository ships a `.pre-commit-config_template.yaml` that defines the full 
 - **`check-json` / `check-yaml` / `check-ast`** — basic syntax validation for all config and code files.
 - **`check-merge-conflict`** — blocks commits with unresolved merge conflict markers.
 - **`name-tests-test`** — enforces that test files match the pattern `*_test.py`.
-- **`check-added-large-files`** — rejects files larger than 5 120 KB (excluding integration READMEs).
+- **`check-added-large-files`** — rejects files larger than 5,120 KB (excluding `Integrations/` and `Scripts/` README files).
 - **`pycln`** — removes unused imports from Python files.
 - **`ruff-format` + `ruff`** — fast Python formatter and linter (see [Linting with ruff](#linting-with-ruff) below).
 - **`mypy-in-docker`** — runs `mypy` type checking inside the integration's Docker image.
@@ -230,6 +230,8 @@ The following packages are defined in the `[tool.poetry.group.dev.dependencies]`
 | `freezegun` | `>=1.1.0` | Freeze time in datetime-sensitive tests |
 | `dateparser` | `>=1.2.0` | Date parsing utilities used by many integrations |
 | `ruff` | `*` | Linter and formatter (version pinned in pre-commit config) |
+| `anyio` | `^4.13.0` | Async I/O utilities used by SDK and test helpers |
+| `httpx` | `^0.28.1` | HTTP client used alongside `requests-mock` in async test contexts |
 
 <Tip>
   The `demisto-sdk` version listed in `pyproject.toml` controls the version used by GitHub Actions CI. To control the version for local development or in other environments, modify your local `pip install demisto-sdk==<version>` or the infra repo's `pyproject.toml` as appropriate.

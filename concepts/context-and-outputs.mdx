@@ -1,7 +1,7 @@
 ---
-title: "Incident Context and Outputs: How XSOAR Stores Automation Data"
+title: "Context and Outputs: How XSOAR Stores Automation Data"
 sidebarTitle: "Context & Outputs"
-description: "The XSOAR incident context is a key-value store shared by all playbook tasks. Integrations write to it via CommandResults and playbooks read from it using dot-notation paths."
+description: "How XSOAR stores automation data across playbook tasks using incident context, CommandResults outputs, dot-notation paths, and DT filter expressions."
 ---
 
 Every Cortex XSOAR incident carries a hierarchical JSON store called the **incident context**. When a playbook task runs an integration command, the returned data is written into this store. Subsequent tasks — whether they run scripts, integrations, or conditional branches — can read any value previously written by any other task, making the context the universal communication layer for playbook automation.
@@ -49,18 +49,18 @@ When a context key holds a **list**, you can filter it using DT expressions wrap
 DT expressions use the syntax `${Path.To.List.{val.fieldName == 'target'}.nestedField}`.
 
 **Filter a list by field value:**
-```
+```text
 ${CortexXDR.Incident.{val.status == 'new'}.id}
 ```
 Returns the `id` of all incidents whose `status` equals `"new"`.
 
 **Access the first element:**
-```
+```text
 ${CortexXDR.Incident.[0].id}
 ```
 
 **Compare a nested field:**
-```
+```text
 ${IP.{val.Address == inputs.IPAddress}.Geo.Country}
 ```
 Returns the `Geo.Country` of whichever IP object's `Address` matches the task input `IPAddress`.
@@ -123,7 +123,7 @@ Context data persists for the lifetime of the incident. Use `outputs_key_field` 
 
 Context paths must follow the `Vendor.ResourceType` convention. The vendor segment is typically your integration name (or the upstream vendor's name), and the resource type is the object being returned.
 
-```
+```text
 VirusTotal.IP          # IP enrichment from VirusTotal
 CortexXDR.Incident     # Incidents from Cortex XDR
 Splunk.Result          # Search results from Splunk
@@ -186,7 +186,7 @@ readable = tableToMarkdown(
 
 Produces:
 
-```
+```markdown
 ### CortexXDR Incidents
 | id  | severity | status   |
 |-----|----------|----------|

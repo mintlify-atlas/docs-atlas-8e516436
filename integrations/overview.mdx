@@ -1,7 +1,7 @@
 ---
 title: "Building Cortex XSOAR Integrations: Architecture Overview"
 sidebarTitle: "Overview"
-description: "Cortex XSOAR integrations connect the platform to external products via commands. Each integration has a YAML config and Python implementation running in an isolated Docker container."
+description: "Cortex XSOAR integrations connect the platform to external products via commands. Each uses a YAML config and Python code in an isolated Docker container."
 ---
 
 Cortex XSOAR integrations are the bridge between the XSOAR platform and the external security products in your environment. Each integration exposes product capabilities as named commands, returns human-readable output for analysts in the War Room, stores machine-readable data in the incident context for downstream playbook use, and runs inside an isolated Docker container so that dependencies never conflict across integrations.

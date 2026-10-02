@@ -14,7 +14,7 @@ A Pack is the fundamental unit of distribution in the Cortex XSOAR Content repos
 
 All Packs live under the repository-root `Packs/` directory:
 
-```
+```text
 Packs/
 └── <PackName>/
 ```
@@ -25,7 +25,7 @@ The Pack directory name must be unique across the repository and conventionally 
 
 The tree below shows all standard subdirectories. Required subdirectories are those that are almost always present; the remainder are optional and are only created when the Pack includes that type of content.
 
-```
+```text
 Packs/
 └── MyPack/
     │
@@ -179,7 +179,7 @@ The following is the real `pack_metadata.json` from the **CommonScripts** Pack, 
 
 Every entity type follows the same nested pattern:
 
-```
+```text
 Packs/<PackName>/<EntityType>/<EntityName>/
 ```
 
@@ -194,7 +194,7 @@ For integrations specifically, the four core files inside that directory are:
 
 For example, the `CortexXDRIR` integration inside the `CortexXDR` Pack lives at:
 
-```
+```text
 Packs/CortexXDR/Integrations/CortexXDRIR/
 ├── CortexXDRIR.py
 ├── CortexXDRIR.yml
@@ -208,7 +208,7 @@ Scripts follow the same pattern under `Scripts/<ScriptName>/`. Playbooks are a s
 
 Every change to any content within a Pack must be accompanied by a new release notes entry. The file name uses underscores in place of dots to match the version string in `pack_metadata.json`:
 
-```
+```text
 Packs/<PackName>/ReleaseNotes/<Major>_<Minor>_<Patch>.md
 ```
 

@@ -1,7 +1,7 @@
 ---
 title: "CommonServerPython API Reference for XSOAR Integrations"
 sidebarTitle: "CommonServerPython"
-description: "CommonServerPython is the runtime library injected into every XSOAR integration. It provides BaseClient, CommandResults, DBotScore types, utility functions, and the demisto module interface."
+description: "CommonServerPython is the XSOAR shared runtime library covering BaseClient, CommandResults, DBotScore types, and the demisto module interface."
 ---
 
 CommonServerPython is the shared runtime library that the Cortex XSOAR server automatically injects into every integration and script before execution. You do not need to bundle or install it — simply import its exports at the top of any integration or script file. The module lives in the content repository at `Packs/Base/Scripts/CommonServerPython/CommonServerPython.py` and is updated with each platform release.

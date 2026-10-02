@@ -1,7 +1,7 @@
 ---
-title: "Commands, CommandResults, and the XSOAR Context"
+title: "Integration Commands, CommandResults, and the XSOAR Context"
 sidebarTitle: "Commands & Outputs"
-description: "Every XSOAR command returns a CommandResults object that populates the War Room and stores machine-readable data in the incident context for downstream playbook use."
+description: "XSOAR commands return CommandResults objects that populate the War Room and store machine-readable data in the incident context for playbook use."
 ---
 
 Every command in a Cortex XSOAR integration produces two kinds of output simultaneously: a human-readable War Room entry for analysts, and machine-readable structured data stored in the incident context for playbooks and downstream automation. The `CommandResults` class is the single object that carries both, and `return_results()` is the function that delivers it to the platform.

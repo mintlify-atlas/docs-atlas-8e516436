@@ -1,7 +1,7 @@
 ---
 title: "BaseClient: HTTP Requests in Cortex XSOAR Integrations"
 sidebarTitle: "BaseClient"
-description: "BaseClient is the standard HTTP abstraction for XSOAR integrations. Inherit from it to get proxy support, SSL verification, retry logic, and consistent error handling."
+description: "BaseClient wraps requests for XSOAR integrations, providing proxy support, SSL control, ok-code validation, automatic retries, and uniform error handling."
 ---
 
 `BaseClient` is the HTTP foundation of every Cortex XSOAR integration. It wraps the `requests` library with all the plumbing that integrations need: system proxy support, SSL certificate verification control, configurable ok-status codes, session reuse, and a uniform error format. Every integration that makes HTTP calls must define a `Client` subclass that inherits from `BaseClient` — you never instantiate `BaseClient` directly.
@@ -60,8 +60,12 @@ client = Client(
   Default headers sent with every request, for example `{'Accept': 'application/json', 'Authorization': 'Bearer TOKEN'}`. Per-request headers passed to `_http_request` override these.
 </ParamField>
 
-<ParamField path="auth" type="dict or tuple" default="None">
+<ParamField path="auth" type="tuple" default="None">
   The `requests`-compatible auth parameter for HTTP Basic/Digest authentication, for example `('username', 'password')`. Per-request `auth` values passed to `_http_request` override this.
+</ParamField>
+
+<ParamField path="timeout" type="float" default="60">
+  Default connection timeout in seconds for all requests made by this client. Corresponds to the `REQUESTS_TIMEOUT` class constant (60 s). Can be overridden by the `REQUESTS_TIMEOUT.<IntegrationName>` or `REQUESTS_TIMEOUT` environment variables at initialisation time, and by the `timeout` argument on individual `_http_request` calls.
 </ParamField>
 
 ## Class-Level Timeout Constants
@@ -84,8 +88,8 @@ The effective timeout is resolved at initialisation time from (in priority order
   The HTTP method: `'GET'`, `'POST'`, `'PUT'`, `'DELETE'`, `'PATCH'`, etc.
 </ParamField>
 
-<ParamField path="url_suffix" type="str" required>
-  The API endpoint path appended to `self._base_url`, for example `'alerts'` or `'incidents/42/comments'`.
+<ParamField path="url_suffix" type="str" default="''">
+  The API endpoint path appended to `self._base_url`, for example `'alerts'` or `'incidents/42/comments'`. Defaults to an empty string; use `full_url` instead when you need to call an address outside `self._base_url`.
 </ParamField>
 
 <ParamField path="full_url" type="str" default="None">

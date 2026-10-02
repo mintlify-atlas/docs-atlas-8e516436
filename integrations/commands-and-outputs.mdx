@@ -1,0 +1,212 @@
+---
+title: "Commands, CommandResults, and the XSOAR Context"
+sidebarTitle: "Commands & Outputs"
+description: "Every XSOAR command returns a CommandResults object that populates the War Room and stores machine-readable data in the incident context for downstream playbook use."
+---
+
+Every command in a Cortex XSOAR integration produces two kinds of output simultaneously: a human-readable War Room entry for analysts, and machine-readable structured data stored in the incident context for playbooks and downstream automation. The `CommandResults` class is the single object that carries both, and `return_results()` is the function that delivers it to the platform.
+
+## The `CommandResults` Class
+
+`CommandResults` is defined in `CommonServerPython` and is the standard return type for all modern integration command functions. Construct it at the end of your command function and pass it to `return_results()`.
+
+<ParamField path="outputs_prefix" type="str">
+  The dot-notation path prefix under which `outputs` is stored in the incident context. For example, `'CortexXDR.Incident'` means the data will be accessible as `${CortexXDR.Incident}` in playbook tasks. Should be `'VendorName.ResourceType'` by convention. Required when `outputs` is provided.
+</ParamField>
+
+<ParamField path="outputs_key_field" type="str or list[str]">
+  The field name (or list of field names) used as the unique key for deduplication when the context is updated. For example, if your output contains an `ID` field that is unique per alert, pass `outputs_key_field='ID'`. When a new result with the same key arrives, XSOAR updates the existing context entry rather than appending a duplicate.
+</ParamField>
+
+<ParamField path="outputs" type="dict or list">
+  The machine-readable data stored in the incident context. Must use CamelCase keys. Can be a single dict or a list of dicts. This is what playbooks access via `${VendorName.ResourceType.FieldName}`.
+</ParamField>
+
+<ParamField path="readable_output" type="str">
+  A Markdown string displayed in the War Room. This is the human-facing result that analysts read. Generate it using `tableToMarkdown()`. If omitted, XSOAR auto-generates a basic table from `outputs`.
+</ParamField>
+
+<ParamField path="raw_response" type="dict or list">
+  The original, unmodified response from the third-party API. Stored in the War Room entry's "Contents" field for debugging but **not** written into the incident context. If not provided, defaults to `outputs`.
+</ParamField>
+
+<ParamField path="indicator" type="Common.Indicator">
+  A structured indicator object (`Common.IP`, `Common.URL`, `Common.Domain`, `Common.File`, etc.) that populates the XSOAR indicators database with a DBotScore. Use this for enrichment commands that look up IPs, domains, URLs, or file hashes.
+</ParamField>
+
+<ParamField path="relationships" type="list">
+  A list of `EntityRelationship` objects that describe connections between indicators (e.g. "IP resolves to Domain"). Displayed in the indicator's relationship graph.
+</ParamField>
+
+<ParamField path="ignore_auto_extract" type="bool" default="False">
+  When `True`, XSOAR does not auto-extract indicators from the `readable_output` string. Useful when the output contains values that look like indicators but should not be ingested (e.g. example.com in documentation).
+</ParamField>
+
+<ParamField path="mark_as_note" type="bool" default="False">
+  When `True`, the War Room entry is marked as a note, distinguishing it from regular command results in the entry timeline.
+</ParamField>
+
+<Note>
+  Output keys should always be CamelCase. The `outputs_prefix` uses dot notation like `Vendor.ResourceType` to organise context data hierarchically. For example, `outputs_prefix='MyVendor.Alert'` with `outputs={'ID': '42', 'Severity': 'High'}` stores the data at `MyVendor.Alert.ID` and `MyVendor.Alert.Severity` in the incident context.
+</Note>
+
+## `return_results()`
+
+`return_results()` is the function that sends a `CommandResults` object (or a list of them) back to the XSOAR platform. Call it in `main()` after your command function returns:
+
+```python
+return_results(commands[command](client, demisto.args()))
+```
+
+`return_results()` accepts:
+- A single `CommandResults` instance
+- A `list` of `CommandResults` instances (use when a command returns multiple entries)
+- A plain `str` (for simple text responses like `'ok'` from `test-module`)
+- A legacy `dict` in the old `return_outputs` format
+
+Do not call `demisto.results()` directly in new integrations — always go through `return_results()`.
+
+## `tableToMarkdown()`
+
+`tableToMarkdown()` is the standard function for generating the `readable_output` string passed to `CommandResults`. It converts a list of dicts (or a single dict) into a Markdown table.
+
+```python
+readable_output = tableToMarkdown(
+    name='MyVendor - Alert List',
+    t=context_entries,            # list of dicts or a single dict
+    headers=['ID', 'Severity', 'Description', 'Created'],  # column order
+    removeNull=True,              # omit columns where every value is None
+)
+```
+
+Key parameters:
+
+| Parameter | Type | Description |
+|---|---|---|
+| `name` | `str` | Table heading displayed as `### name` |
+| `t` | `dict` or `list` | The data to render |
+| `headers` | `list` or `str` | Ordered list of columns; if omitted, all keys are used |
+| `removeNull` | `bool` | Removes columns where all values are `None` |
+| `headerTransform` | `callable` | Function applied to each header string (e.g. `pascalToSpace`) |
+| `url_keys` | `list` | Keys whose values should be rendered as clickable Markdown links |
+| `date_fields` | `list` | Keys whose values are timestamps to be formatted as human-readable dates |
+
+## Complete Command Function Example
+
+The following example shows a command function that fetches a list of alerts from the API and returns both a War Room table and machine-readable context data:
+
+```python
+def list_alerts_command(client: Client, args: dict) -> CommandResults:
+    """Returns a paginated list of alerts from the MyVendor API.
+
+    Args:
+        client: Authenticated Client instance.
+        args: Command arguments from demisto.args().
+
+    Returns:
+        CommandResults with human-readable table and context data.
+    """
+    limit = int(args.get('limit', 50))
+    severity = args.get('severity')          # optional filter
+
+    # Call the Client method (no business logic here — that lives in Client)
+    raw_response = client.list_alerts(limit=limit, severity=severity)
+    alerts = raw_response.get('alerts', [])
+
+    if not alerts:
+        return CommandResults(
+            readable_output='MyVendor Integration - No alerts found.',
+        )
+
+    # Transform raw API keys to CamelCase context keys
+    context_entries = [
+        {
+            'ID': alert.get('alertId'),
+            'Severity': alert.get('severity'),
+            'Description': alert.get('description'),
+            'Created': alert.get('createdAt'),
+            'IsActive': alert.get('isActive'),
+            'AssigneeName': alert.get('assignee', {}).get('name'),
+        }
+        for alert in alerts
+    ]
+
+    readable_output = tableToMarkdown(
+        name='MyVendor Integration - Alerts',
+        t=context_entries,
+        headers=['ID', 'Severity', 'Description', 'Created', 'IsActive'],
+        removeNull=True,
+    )
+
+    return CommandResults(
+        outputs_prefix='MyVendor.Alert',
+        outputs_key_field='ID',
+        outputs=context_entries,
+        readable_output=readable_output,
+        raw_response=raw_response,
+    )
+```
+
+## `return_error()`
+
+Use `return_error()` for errors that should be visible to the analyst in the War Room. It formats an error entry, logs the message, and exits the script:
+
+```python
+def return_error(message, error='', outputs=None):
+    ...
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `message` | `str` | The human-readable error message shown in the War Room (required). |
+| `error` | `str` or `Exception` | The raw exception or error string logged internally (optional). When an `Exception` is passed, the traceback is appended to the logs. |
+| `outputs` | `dict` | Optional context outputs to write even on failure (rarely used). |
+
+```python
+try:
+    result = client.get_alert(alert_id)
+except Exception as e:
+    return_error(
+        message=f'Failed to retrieve alert {alert_id}. Error: {str(e)}',
+        error=e,
+    )
+```
+
+<Tip>
+  Raise `DemistoException` from inside `Client` methods when the API returns a recognisable error (e.g. 404 Not Found, 401 Unauthorized). The `_http_request` wrapper raises `DemistoException` automatically for non-ok status codes, so you usually only need to add explicit raises for application-level errors embedded in a 200 response body.
+</Tip>
+
+## Context Key Naming Conventions
+
+Consistent naming makes context data predictable for playbook authors and analysts.
+
+<CodeGroup>
+
+```python Good — CamelCase output keys
+context_entry = {
+    'ID': alert.get('alertId'),
+    'Severity': alert.get('severity'),
+    'CreatedAt': alert.get('createdAt'),
+    'AssigneeName': alert.get('assignee', {}).get('name'),
+}
+```
+
+```python Bad — raw API keys (snake_case or camelCase)
+context_entry = {
+    'alertId': alert.get('alertId'),       # bad: camelCase
+    'created_at': alert.get('createdAt'),  # bad: snake_case
+}
+```
+
+</CodeGroup>
+
+The `outputs_prefix` should follow the pattern `VendorName.ResourceType`:
+
+| Prefix | Meaning |
+|---|---|
+| `MyVendor.Alert` | Alert objects from MyVendor |
+| `MyVendor.Incident` | Incident objects from MyVendor |
+| `MyVendor.User` | User objects from MyVendor |
+| `CortexXDR.Incident` | Incident objects from Cortex XDR (used in the real `CortexXDRIR` integration) |
+
+The `contextPath` entries in the YAML `outputs` block must exactly match the keys produced by your Python code. For example, if Python produces `{'ID': '42', 'Severity': 'High'}` under `outputs_prefix='MyVendor.Alert'`, the YAML must declare `contextPath: MyVendor.Alert.ID` and `contextPath: MyVendor.Alert.Severity`.

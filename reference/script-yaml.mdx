@@ -1,0 +1,223 @@
+---
+title: "Script YAML Schema Reference for Cortex XSOAR Scripts"
+sidebarTitle: "Script YAML"
+description: "Schema reference for the Cortex XSOAR script YAML configuration — covering the script block, arguments, outputs, and differences from integration YAML."
+---
+
+Cortex XSOAR scripts (automations) use the same YAML format as integrations, but with a simplified structure: scripts have no `configuration` section (they receive no instance parameters), and instead of multiple `commands`, they expose a single flat set of `args` and `outputs`. A script is a callable unit — it is invoked directly by a playbook task, a War Room command, or another script via `demisto.executeCommand()`.
+
+<Note>
+  Scripts have a single `args`/`outputs` block at the top level — they represent a single callable function, unlike integrations which expose multiple commands.
+</Note>
+
+---
+
+## Top-Level Fields
+
+<ParamField path="name" type="string" required>
+  The script's unique identifier, used to call it in playbooks and via `demisto.executeCommand('ScriptName', args)`. Must be unique within the XSOAR installation. Example: `"AddDBotScoreToContext"`.
+</ParamField>
+
+<ParamField path="comment" type="string" required>
+  A description of what the script does. Displayed in the automation library and in playbook task configuration. This field serves the same purpose as `description` in integration YAML. Example: `"Add DBot score to context for indicators with custom vendor, score, reliability, and type."`.
+</ParamField>
+
+<ParamField path="type" type="string" required>
+  The script runtime type. Use `"python"` for Python scripts. Also valid: `"javascript"`, `"powershell"`.
+</ParamField>
+
+<ParamField path="subtype" type="string">
+  The Python version. Must be `"python3"` for all new scripts.
+</ParamField>
+
+<ParamField path="tags" type="array">
+  A list of tag strings used to categorise and filter scripts in the automation library. Example: `["Utility", "TIM"]`.
+</ParamField>
+
+<ParamField path="enabled" type="bool" default="true">
+  When `false`, the script is disabled and cannot be executed. Defaults to `true`.
+</ParamField>
+
+<ParamField path="runas" type="string">
+  The execution role for the script. Set to `"DBotWeakRole"` for scripts that do not require elevated permissions. This is the standard value for most automation scripts.
+</ParamField>
+
+<ParamField path="dockerimage" type="string">
+  The fully qualified Docker image used to run the script, for example `"demisto/python3:3.12.13.10404775"`. Required for Python scripts unless they run in the default engine environment.
+</ParamField>
+
+<ParamField path="scripttarget" type="integer" default="0">
+  Controls where the script runs: `0` = XSOAR server, `1` = remote agent.
+</ParamField>
+
+<ParamField path="fromversion" type="string">
+  The minimum XSOAR platform version required to run this script. Example: `"6.0.0"`.
+</ParamField>
+
+---
+
+## `script` Field
+
+In the script YAML, the `script` field at the top level holds the embedded script code as a string. For **package-format** scripts (where the code lives in a separate `.py` file alongside the YAML), this field is set to an empty string `''` — the build tooling injects the code at upload time.
+
+```yaml
+script: ''
+```
+
+---
+
+## `args` Section
+
+The `args` array defines the input arguments the script accepts. This is the script equivalent of an integration command's `arguments` array. Arguments are accessible at runtime via `demisto.args()`.
+
+<ParamField path="args[].name" type="string" required>
+  The argument name. Accessible via `demisto.args().get('name')` at runtime.
+</ParamField>
+
+<ParamField path="args[].description" type="string" required>
+  Human-readable description of the argument shown in the playbook task editor.
+</ParamField>
+
+<ParamField path="args[].required" type="bool" default="false">
+  When `true`, the platform rejects the invocation if this argument is not provided.
+</ParamField>
+
+<ParamField path="args[].isArray" type="bool" default="false">
+  When `true`, the argument accepts a comma-separated list of values.
+</ParamField>
+
+<ParamField path="args[].default" type="bool" default="false">
+  When `true`, this argument receives the value of any un-named positional input.
+</ParamField>
+
+<ParamField path="args[].predefined" type="array">
+  An allowlist of valid string values. Renders a dropdown in the UI when provided.
+</ParamField>
+
+<ParamField path="args[].auto" type="string">
+  When set to `PREDEFINED`, enforces that the supplied value is one of the `predefined` values.
+</ParamField>
+
+---
+
+## `outputs` Section
+
+The `outputs` array declares the context data that the script writes. This is the same structure as integration command outputs. Each entry describes a single context key.
+
+<ParamField path="outputs[].contextPath" type="string" required>
+  The dot-notation context path written by this script, for example `"DBotScore.Score"`.
+</ParamField>
+
+<ParamField path="outputs[].description" type="string" required>
+  Human-readable description of what this output value contains.
+</ParamField>
+
+<ParamField path="outputs[].type" type="string">
+  The data type. Valid values: `String`, `Number`, `Boolean`, `Date`, `Unknown`.
+</ParamField>
+
+---
+
+## Differences from Integration YAML
+
+| Feature | Script YAML | Integration YAML |
+|---|---|---|
+| `configuration` section | **No** — scripts receive no instance parameters | **Yes** — defines the instance config UI |
+| Commands | **Single** implicit command — the script itself | **Multiple** named commands under `script.commands` |
+| Arguments | Top-level `args` array | Per-command `arguments` array under `script.commands[].arguments` |
+| Outputs | Top-level `outputs` array | Per-command `outputs` array under `script.commands[].outputs` |
+| `comment` vs `description` | Uses `comment` for the description field | Uses `description` at the top level |
+| Invocation | Via `demisto.executeCommand('ScriptName', args)` or playbook task | Via `demisto.command()` dispatch in the integration `main()` |
+
+---
+
+## Complete Minimal Script YAML
+
+The following is a representative example based on the real `AddDBotScoreToContext` script:
+
+```yaml
+commonfields:
+  id: AddDBotScoreToContext
+  version: -1
+name: AddDBotScoreToContext
+comment: Add DBot score to context for indicators with custom vendor, score, reliability, and type.
+type: python
+subtype: python3
+dockerimage: demisto/python3:3.12.13.10404775
+enabled: true
+runas: DBotWeakRole
+script: ''
+scripttarget: 0
+fromversion: 6.0.0
+tags: []
+args:
+- name: indicator
+  description: The indicator value (ex 1.1.1.1).
+  required: true
+- name: indicatorType
+  description: The indicator type (ex ip, url, email, domain).
+  required: true
+- name: score
+  description: The indicator score.
+  required: true
+- name: vendor
+  description: The vendor to assign to this DBotScoreEntry.
+  required: true
+- name: reliability
+  description: The reputation reliability.
+  auto: PREDEFINED
+  predefined:
+  - A+ - 3rd party enrichment
+  - A - Completely reliable
+  - B - Usually reliable
+  - C - Fairly reliable
+  - D - Not usually reliable
+  - E - Unreliable
+  - F - Reliability cannot be judged
+outputs: []
+tests:
+- No tests (auto formatted)
+```
+
+---
+
+## Corresponding Python Implementation
+
+The Python file that implements the above YAML would follow this structure:
+
+```python
+from CommonServerPython import *
+
+
+def add_dbot_score_to_context(args: dict) -> CommandResults:
+    indicator = args.get('indicator', '')
+    indicator_type = args.get('indicatorType', '')
+    score_str = args.get('score', '0')
+    vendor = args.get('vendor', '')
+    reliability = args.get('reliability')
+
+    score_map = {'0': 0, '1': 1, '2': 2, '3': 3,
+                 'unknown': 0, 'good': 1, 'suspicious': 2, 'bad': 3}
+    score = score_map.get(score_str.lower(), 0)
+
+    dbot_score = Common.DBotScore(
+        indicator=indicator,
+        indicator_type=indicator_type,
+        integration_name=vendor,
+        score=score,
+        reliability=reliability,
+    )
+
+    return CommandResults(indicator=dbot_score)
+
+
+def main():
+    try:
+        return_results(add_dbot_score_to_context(demisto.args()))
+    except Exception as e:
+        return_error(f'Error: {e}')
+
+
+if __name__ in ('__main__', '__builtin__', 'builtins'):
+    main()
+```

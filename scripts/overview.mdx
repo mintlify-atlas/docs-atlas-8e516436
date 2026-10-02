@@ -1,0 +1,184 @@
+---
+title: "Cortex XSOAR Scripts: Automation and Utility Functions"
+sidebarTitle: "Overview"
+description: "Scripts are Python or JavaScript functions that run inside XSOAR to transform data, automate tasks, and glue together integration outputs within playbooks and layouts."
+---
+
+Scripts are the smallest unit of automation in Cortex XSOAR. Where integrations establish connections to external services and expose their API capabilities as commands, scripts focus on a single, self-contained task that operates on data that already exists — in the incident context, passed as explicit arguments, or retrieved from XSOAR's internal stores. This makes them the go-to tool for data transformation, enrichment aggregation, conditional logic, and output formatting without any external API dependency.
+
+## Scripts vs. Integrations
+
+Both scripts and integrations run in isolated Docker containers and share the same Python runtime. The key distinction is scope and configuration:
+
+| | Scripts | Integrations |
+|--|---------|--------------|
+| External API connection | No | Yes |
+| Instance configuration | None | Parameters configured per-instance (API keys, URLs, etc.) |
+| Primary input | `demisto.args()` and the incident context | `demisto.params()` (instance config) + `demisto.args()` |
+| Typical use case | Transform, filter, calculate, format | Query or act on an external system |
+| `configuration` section in YAML | Absent | Present |
+
+Because scripts have no external dependencies, they are portable across any XSOAR installation with no additional setup — you drop the script into a Pack and it works immediately.
+
+## Directory Structure
+
+Each script lives in its own subdirectory under `Packs/<PackName>/Scripts/`:
+
+```
+Packs/
+└── MyPack/
+    └── Scripts/
+        └── MyScriptName/
+            ├── MyScriptName.py         # Script implementation (Python 3)
+            ├── MyScriptName.yml        # Script configuration (metadata, args, outputs)
+            ├── MyScriptName_test.py    # Pytest unit tests
+            └── README.md              # Usage documentation
+```
+
+JavaScript scripts follow the same layout with a `.js` file instead of `.py`. The directory name must exactly match the script name declared in the YAML.
+
+## Script YAML Structure
+
+A script's YAML file is similar to an integration command definition, but without a `configuration` section. The `subtype: python3` field specifies the Python version; `type: python` or `type: javascript` selects the runtime.
+
+```yaml
+commonfields:
+  id: MyScriptName
+  version: -1
+name: MyScriptName
+comment: A brief description of what the script does and when to use it.
+type: python
+subtype: python3
+dockerimage: demisto/python3:3.12.13.10404775
+tags:
+  - Utility
+  - transformer
+args:
+  - name: value
+    required: true
+    description: The input value to process.
+  - name: threshold
+    required: false
+    defaultValue: "0"
+    description: Minimum threshold for output.
+outputs:
+  - contextPath: MyResult.Output
+    description: The processed result.
+    type: string
+fromversion: 6.0.0
+```
+
+### Key YAML Fields
+
+| Field | Description |
+|-------|-------------|
+| `commonfields.id` | Unique identifier for the script across the platform. |
+| `name` | Display name used to invoke the script (`!MyScriptName`). |
+| `comment` | Short description shown in the UI and documentation. |
+| `type` | Runtime: `python` or `javascript`. |
+| `subtype` | Python version: `python3` (required for all new scripts). |
+| `dockerimage` | The Docker image that provides the runtime environment. Dependencies are pinned here, not installed via `pip`. |
+| `args` | List of declared input arguments; accessed at runtime via `demisto.args()`. |
+| `outputs` | Context paths the script writes; must match the actual keys set via `CommandResults`. |
+| `tags` | Searchable labels, e.g. `transformer`, `general`, `Utility`. |
+
+## Script Runtime
+
+Every script file starts with the same two imports that inject the XSOAR runtime:
+
+```python
+import demistomock as demisto          # Platform API (args, context, results, logging)
+from CommonServerPython import *       # Shared helpers: CommandResults, tableToMarkdown, return_results, etc.
+```
+
+`CommonServerPython` is injected automatically at runtime — you do not need to install it. It provides the full standard library of helpers that all scripts and integrations share. The `demistomock` import provides a testable mock of the `demisto` platform API for use in `_test.py` files.
+
+## Returning Results
+
+Scripts return structured data to the incident war room and context using `CommandResults` and `return_results()`:
+
+```python
+import demistomock as demisto
+from CommonServerPython import *
+
+
+def main():
+    args = demisto.args()
+    input_value: str = args.get("value", "")
+
+    # --- perform your logic ---
+    result = input_value.upper()
+
+    # --- return structured output ---
+    return_results(
+        CommandResults(
+            outputs_prefix="MyResult",
+            outputs_key_field="Input",
+            outputs={"Input": input_value, "Output": result},
+            readable_output=tableToMarkdown(
+                "Script Result",
+                {"Input": input_value, "Output": result},
+            ),
+        )
+    )
+
+
+if __name__ in ("__main__", "__builtin__", "builtins"):
+    main()
+```
+
+`CommandResults` accepts the following key parameters:
+
+- **`outputs_prefix`** — The root key path written to the incident context (e.g. `"DBotScore"`, `"CVSS"`, `"EntropyResult"`). Should be CamelCase and unique to your Pack.
+- **`outputs`** — A `dict` or `list` of data to store. Output keys should also be CamelCase.
+- **`outputs_key_field`** — The primary key field used to deduplicate context entries.
+- **`readable_output`** — A Markdown string rendered in the war room. Use `tableToMarkdown()` to produce formatted tables.
+- **`raw_response`** — The original data before any transformation (stored as the raw entry content).
+
+`return_results()` wraps `demisto.results()` and handles `CommandResults` objects, lists of results, and plain strings uniformly.
+
+## Error Handling
+
+For user-facing errors (bad arguments, missing inputs), use `return_error()` rather than raising an exception:
+
+```python
+def main():
+    data = demisto.args().get("data", "")
+    if not data:
+        return_error("The 'data' argument is required and cannot be empty.")
+
+    # normal processing...
+```
+
+For unexpected runtime failures, let the exception propagate naturally — XSOAR catches it and logs a detailed error entry in the war room.
+
+## Logging
+
+Use `demisto.debug()` and `demisto.info()` for diagnostic output. Never use `print()` — it is not captured by the XSOAR logging pipeline.
+
+```python
+demisto.debug(f"Processing {len(items)} items.")
+demisto.info("Enrichment complete.")
+```
+
+## Common Use Cases
+
+Scripts are the right tool whenever you need to:
+
+- **Transform data** — Re-format, filter, parse, or calculate values from context data before passing them to the next task (e.g. convert an array to CSV, encode a string to Base64, calculate Shannon entropy).
+- **Aggregate enrichment results** — Combine outputs from multiple integrations into a single context key or severity score.
+- **Format war-room output** — Render complex data as readable Markdown tables using `tableToMarkdown()`.
+- **Implement custom logic** — Apply business rules that no integration implements — such as CVSS score calculation or timestamp interval analysis.
+- **Manage incident fields** — Set, update, or read incident fields and grid fields programmatically.
+- **Utility operations** — Check whether a value exists, compare lists, verify IP ranges, parse email files, and hundreds of other commonly needed operations.
+
+The `Common Scripts` Pack ships **295+ scripts** covering the most frequent operations so you rarely need to write one from scratch.
+
+<CardGroup cols={2}>
+  <Card title="Common Scripts" icon="puzzle-piece" href="/scripts/common-scripts">
+    Browse the 295+ built-in utility scripts for data transformation, indicator handling, and incident management.
+  </Card>
+  <Card title="Context and Outputs" icon="database" href="/concepts/context-and-outputs">
+    Learn how scripts read from and write to the incident context that connects your automation steps.
+  </Card>
+</CardGroup>

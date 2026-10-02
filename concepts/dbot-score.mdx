@@ -1,0 +1,311 @@
+---
+title: "DBotScore: Standardized Threat Intelligence Indicator Scoring"
+sidebarTitle: "DBotScore"
+description: "DBotScore is the XSOAR standard for rating indicator reputation. Integrations return scores of 0-3 (Unknown/Good/Suspicious/Bad) using the Common.Indicator classes from CommonServerPython."
+---
+
+Every threat intelligence integration in Cortex XSOAR reports indicator reputation using a shared scoring standard called **DBotScore**. Whether an integration queries VirusTotal, a custom threat feed, or an internal lookup service, the score it returns is always expressed in the same four-value scale. This uniformity lets XSOAR aggregate scores from multiple vendors, display a consistent reputation badge in the war room, and apply playbook logic that works regardless of which vendor produced the score.
+
+## The Four Score Values
+
+DBotScore uses integer values `0`–`3`. The numeric constants are defined on `Common.DBotScore`:
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `Common.DBotScore.NONE` | `0` | Unknown — the vendor has no opinion on this indicator |
+| `Common.DBotScore.GOOD` | `1` | Good — the indicator is known-clean |
+| `Common.DBotScore.SUSPICIOUS` | `2` | Suspicious — the indicator shows warning signs |
+| `Common.DBotScore.BAD` | `3` | Bad / Malicious — the indicator is confirmed malicious |
+
+## Indicator Types: `DBotScoreType`
+
+The `DBotScoreType` class enumerates all recognized indicator types. Pass one of these constants as the `indicator_type` argument when creating a `Common.DBotScore` object.
+
+```python
+class DBotScoreType(object):
+    IP            = 'ip'
+    FILE          = 'file'
+    DOMAIN        = 'domain'
+    URL           = 'url'
+    CVE           = 'cve'
+    ACCOUNT       = 'account'
+    CIDR          = 'cidr'
+    DOMAINGLOB    = 'domainglob'
+    CERTIFICATE   = 'certificate'
+    CRYPTOCURRENCY = 'cryptocurrency'
+    EMAIL         = 'email'
+    ATTACKPATTERN = 'attackpattern'
+    CUSTOM        = 'custom'
+```
+
+## Source Reliability: `DBotScoreReliability`
+
+Different vendors have different levels of trustworthiness. `DBotScoreReliability` encodes this so that XSOAR can correctly weight conflicting scores from different integrations when determining the final reputation displayed to an analyst.
+
+```python
+class DBotScoreReliability(object):
+    A_PLUS_PLUS = 'A++ - Reputation script'   # Most authoritative (internal scripts)
+    A_PLUS      = 'A+ - 3rd party enrichment'
+    A           = 'A - Completely reliable'
+    B           = 'B - Usually reliable'
+    C           = 'C - Fairly reliable'
+    D           = 'D - Not usually reliable'
+    E           = 'E - Unreliable'
+    F           = 'F - Reliability cannot be judged'
+```
+
+Use the highest reliability level that accurately describes your source. Commercial threat-intel feeds typically land between `A` and `B`. Community-sourced feeds are more commonly `C` or `D`.
+
+<Note>
+Always set the `reliability` parameter on `DBotScore` using `DBotScoreReliability`. This allows XSOAR to weight conflicting scores from different vendors correctly, so a `BAD` verdict from an `A+` source overrides a `GOOD` verdict from an `F` source.
+</Note>
+
+## Context Paths Written by DBotScore
+
+When a `CommandResults` object is returned with an `indicator`, XSOAR writes the following standard context keys automatically:
+
+| Context key | Example value | Notes |
+|---|---|---|
+| `DBotScore.Indicator` | `"1.2.3.4"` | The raw indicator value |
+| `DBotScore.Type` | `"ip"` | One of the `DBotScoreType` string values |
+| `DBotScore.Vendor` | `"VirusTotal"` | The integration name (set automatically) |
+| `DBotScore.Score` | `3` | Integer `0`–`3` |
+| `DBotScore.Reliability` | `"A - Completely reliable"` | One of the `DBotScoreReliability` strings |
+
+The full context path with deduplication expression (from the source) is:
+
+```
+DBotScore(val.Indicator && val.Indicator == obj.Indicator && val.Vendor == obj.Vendor && val.Type == obj.Type)
+```
+
+This ensures that if the same integration scores the same indicator twice, the entry is updated rather than duplicated.
+
+## Indicator Classes: `Common.IP`, `Common.URL`, `Common.Domain`, `Common.File`
+
+Each indicator type has a dedicated class in `CommonServerPython`. All of them accept a `dbot_score` parameter which must be a `Common.DBotScore` instance. The class handles writing both the standard `IP.*` / `URL.*` / etc. context paths **and** the `DBotScore.*` paths in a single operation.
+
+### `Common.IP`
+
+```python
+Common.IP(
+    ip,                      # str — the IP address (required)
+    dbot_score,              # Common.DBotScore (required)
+    asn=None,                # str — autonomous system number, e.g. "AS8948"
+    as_owner=None,           # str — autonomous system owner
+    region=None,             # str
+    port=None,               # str
+    internal=None,           # bool
+    geo_latitude=None,       # str
+    geo_longitude=None,      # str
+    geo_country=None,        # str
+    hostname=None,           # str
+    detection_engines=None,  # int — total engines that checked the indicator
+    positive_engines=None,   # int — engines that flagged it malicious
+    # ... additional optional fields
+)
+```
+
+Context path: `IP(val.Address && val.Address == obj.Address)`
+
+### `Common.URL`
+
+```python
+Common.URL(
+    url,                       # str — the URL (required)
+    dbot_score,                # Common.DBotScore (required)
+    detection_engines=None,    # int
+    positive_detections=None,  # int
+    category=None,             # str
+    port=None,                 # str
+    # ... additional optional fields
+)
+```
+
+Context path: `URL(val.Data && val.Data == obj.Data)`
+
+### `Common.Domain`
+
+```python
+Common.Domain(
+    domain,                  # str — the domain name (required)
+    dbot_score,              # Common.DBotScore (required)
+    dns=None,                # str
+    detection_engines=None,  # int
+    registrar_name=None,     # str
+    creation_date=None,      # str
+    expiration_date=None,    # str
+    name_servers=None,       # str
+    # ... additional optional fields
+)
+```
+
+Context path: `Domain(val.Name && val.Name == obj.Name)`
+
+### `Common.File`
+
+```python
+Common.File(
+    dbot_score,                    # Common.DBotScore (required)
+    name=None,                     # str — full filename with extension
+    md5=None,                      # str
+    sha1=None,                     # str
+    sha256=None,                   # str
+    sha512=None,                   # str
+    ssdeep=None,                   # str
+    size=None,                     # int — bytes
+    extension=None,                # str — e.g. "exe"
+    file_type=None,                # str — as determined by libmagic
+    path=None,                     # str
+    hostname=None,                 # str
+    digital_signature__publisher=None,  # str
+    malware_family=None,           # str
+    # ... additional optional fields
+)
+```
+
+Context path: `File(val.MD5 && val.MD5 == obj.MD5 || val.SHA1 && val.SHA1 == obj.SHA1 || val.SHA256 && val.SHA256 == obj.SHA256 || ...)`
+
+## Complete Example: Scoring an IP Indicator
+
+The following shows a complete reputation command that scores an IP address and returns it using the standard indicator flow.
+
+<CodeGroup>
+
+```python ip_reputation_command.py
+import demistomock as demisto
+from CommonServerPython import *
+
+
+def ip_reputation_command(client: Client, args: dict, reliability: str) -> CommandResults:
+    """
+    Query the vendor API for an IP reputation and return a scored indicator.
+    """
+    ip_address: str = args.get('ip', '')
+    if not ip_address:
+        raise ValueError('ip argument is required')
+
+    # Call the vendor API
+    raw_response = client.get_ip_reputation(ip_address)
+
+    # Map vendor score to XSOAR DBotScore integer
+    vendor_score: str = raw_response.get('verdict', 'unknown').lower()
+    score_mapping = {
+        'clean':      Common.DBotScore.GOOD,
+        'suspicious': Common.DBotScore.SUSPICIOUS,
+        'malicious':  Common.DBotScore.BAD,
+    }
+    dbot_score_value = score_mapping.get(vendor_score, Common.DBotScore.NONE)
+
+    # Build the DBotScore object
+    dbot_score = Common.DBotScore(
+        indicator=ip_address,
+        indicator_type=DBotScoreType.IP,
+        integration_name='MyVendor',   # overridden automatically from integration name
+        score=dbot_score_value,
+        reliability=reliability,       # e.g. DBotScoreReliability.B
+        malicious_description=raw_response.get('reason') if dbot_score_value == Common.DBotScore.BAD else None,
+    )
+
+    # Build the IP indicator object — passes the dbot_score in
+    ip_indicator = Common.IP(
+        ip=ip_address,
+        dbot_score=dbot_score,
+        asn=raw_response.get('asn'),
+        as_owner=raw_response.get('asn_owner'),
+        geo_country=raw_response.get('country'),
+        detection_engines=raw_response.get('engines_total'),
+        positive_engines=raw_response.get('engines_positive'),
+    )
+
+    # Human-readable output for the war room
+    readable = tableToMarkdown(
+        name=f'IP Reputation: {ip_address}',
+        t={
+            'IP':                ip_address,
+            'Score':             dbot_score.to_readable(),
+            'ASN':               raw_response.get('asn'),
+            'Country':           raw_response.get('country'),
+            'Detection Engines': raw_response.get('engines_total'),
+            'Positive Engines':  raw_response.get('engines_positive'),
+        },
+        removeNull=True,
+    )
+
+    return CommandResults(
+        readable_output=readable,
+        indicator=ip_indicator,        # ← writes IP.* and DBotScore.* context paths
+        raw_response=raw_response,
+    )
+
+
+def main() -> None:
+    params  = demisto.params()
+    args    = demisto.args()
+    command = demisto.command()
+
+    client = Client(
+        base_url=params.get('url', '').rstrip('/'),
+        verify=not params.get('insecure', False),
+        proxy=params.get('proxy', False),
+        headers={'X-API-Key': params.get('api_key')},
+    )
+
+    reliability = params.get('reliability', DBotScoreReliability.B)
+
+    try:
+        if command == 'test-module':
+            client.test_connection()
+            return_results('ok')
+        elif command == 'ip':
+            return_results(ip_reputation_command(client, args, reliability))
+        else:
+            raise NotImplementedError(f'Command {command!r} is not implemented.')
+    except Exception as e:
+        return_error(f'Failed to execute {command}. Error: {e}')
+
+
+if __name__ in ('__main__', '__builtin__', 'builtins'):
+    main()
+```
+
+```yaml Integration YAML (outputs)
+outputs:
+  - contextPath: IP.Address
+    description: The IP address.
+    type: String
+  - contextPath: IP.ASN
+    description: Autonomous system number.
+    type: String
+  - contextPath: IP.Geo.Country
+    description: Country where the IP is located.
+    type: String
+  - contextPath: DBotScore.Indicator
+    description: The indicator that was tested.
+    type: String
+  - contextPath: DBotScore.Type
+    description: The indicator type.
+    type: String
+  - contextPath: DBotScore.Vendor
+    description: The vendor that calculated the score.
+    type: String
+  - contextPath: DBotScore.Score
+    description: The actual score (0–3).
+    type: Number
+  - contextPath: DBotScore.Reliability
+    description: Reliability of the source.
+    type: String
+```
+
+</CodeGroup>
+
+## Score Aggregation Across Vendors
+
+When multiple integrations score the same indicator, XSOAR aggregates the scores using the vendor reliability weighting. The platform stores one `DBotScore` entry per `(Indicator, Vendor, Type)` triple, so an analyst sees a per-vendor breakdown alongside an overall reputation badge that reflects the highest-confidence verdict.
+
+```python
+# VirusTotal scores 1.2.3.4 as BAD with reliability A
+# InternalScript scores 1.2.3.4 as GOOD with reliability A++
+# XSOAR shows: BAD (from VirusTotal), GOOD (from InternalScript)
+# The indicator widget shows the A++ result (InternalScript GOOD)
+# because A++ outweighs A in the reliability scale
+```

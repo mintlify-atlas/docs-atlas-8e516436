@@ -1,0 +1,208 @@
+---
+title: "Integration YAML Configuration: Parameters and Commands"
+sidebarTitle: "YAML Config"
+description: "The integration YAML file defines instance parameters, command signatures, arguments, and output paths that Cortex XSOAR uses to render the UI and validate inputs."
+---
+
+The YAML configuration file is the contract between your integration and the XSOAR platform. XSOAR reads this file to render the instance configuration form in the UI, validate command arguments before execution, populate auto-complete in the War Room, and generate documentation. Every field you define in the YAML has a direct effect on how analysts interact with your integration.
+
+## Top-Level YAML Structure
+
+An integration YAML file has the following top-level keys:
+
+<ParamField path="name" type="string" required>
+  The internal identifier for the integration. Must be unique across all content. Used in pack metadata and references. No spaces — use camel case or hyphens.
+</ParamField>
+
+<ParamField path="display" type="string" required>
+  The human-readable name shown in the XSOAR UI. This is what analysts see in the integration list and on instance configuration screens.
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  A short description of what the integration does. Shown in the marketplace listing and on the configuration page.
+</ParamField>
+
+<ParamField path="category" type="string" required>
+  The marketplace category. Must be one of the recognised values such as `Analytics & SIEM`, `Endpoint`, `Data Enrichment & Threat Intelligence`, etc.
+</ParamField>
+
+<ParamField path="image" type="string">
+  Path to the integration logo image (PNG, max 10 KB, 120×50 px). Displayed in the marketplace and on the instance card.
+</ParamField>
+
+<ParamField path="script" type="object" required>
+  The script block containing `commands`, `dockerimage`, `type`, `subtype`, `isfetch`, and other execution settings. See below for details.
+</ParamField>
+
+```yaml
+category: Analytics & SIEM
+commonfields:
+  id: MyVendorIntegration
+  version: -1
+description: Connects XSOAR to MyVendor for alert management and enrichment.
+display: MyVendor Integration
+name: MyVendorIntegration
+script:
+  dockerimage: demisto/python3:3.7.4.977
+  isfetch: false
+  type: python
+  subtype: python3
+  script: '-'
+  commands: []
+```
+
+## The `configuration` Section
+
+The `configuration` list defines the instance parameters that administrators fill in when they create an integration instance. Every integration should include at minimum the standard connectivity and security parameters.
+
+<ParamField path="name" type="string" required>
+  The parameter identifier used in `demisto.params()` to retrieve the value at runtime.
+</ParamField>
+
+<ParamField path="display" type="string" required>
+  The label shown next to the field in the configuration UI.
+</ParamField>
+
+<ParamField path="type" type="integer" required>
+  Numeric type code that controls how the field is rendered:
+  - `0` — Short Text (plain text input)
+  - `8` — Boolean (checkbox)
+  - `9` — Authentication (username + password pair, password is masked)
+  - `4` — Encrypted (single masked text field, for API keys/tokens)
+  - `16` — Multi Select (dropdown allowing multiple selections)
+</ParamField>
+
+<ParamField path="required" type="boolean">
+  Whether XSOAR blocks instance creation if this parameter is empty. Defaults to `false`.
+</ParamField>
+
+<ParamField path="defaultvalue" type="string">
+  Pre-filled value shown in the configuration form. Useful for common defaults such as `https://example.com` or `'true'`.
+</ParamField>
+
+<ParamField path="additionalinfo" type="string">
+  Tooltip text shown alongside the field to help administrators understand what value to enter.
+</ParamField>
+
+The following snippet shows the standard required parameters that every integration should include:
+
+```yaml
+configuration:
+  - defaultvalue: https://example.com
+    display: Server URL (e.g. https://example.com)
+    name: url
+    required: true
+    type: 0
+
+  - display: API Key
+    name: apikey
+    required: true
+    type: 4
+
+  - display: Trust any certificate (not secure)
+    name: insecure
+    required: false
+    type: 8
+
+  - display: Use system proxy settings
+    name: proxy
+    required: false
+    type: 8
+```
+
+The `proxy` and `insecure` parameters are **required in every integration**. They map directly to the `verify` and `proxy` arguments passed to `BaseClient`.
+
+For integrations that authenticate with a username and password, use the `credentials` parameter (type `9`) instead of a plain API key field:
+
+```yaml
+  - display: Credentials
+    name: credentials
+    required: true
+    type: 9
+    displaypassword: API Key
+    hiddenusername: true
+```
+
+## The `script.commands` Section
+
+Each entry in `script.commands` defines one command that analysts can invoke from the War Room or from a playbook task.
+
+<ParamField path="name" type="string" required>
+  The command name as typed in the War Room, e.g. `myvendor-get-alert`. Must follow the `brand-action` naming convention.
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  A sentence describing what the command does. Shown in the auto-complete tooltip and in the generated README.
+</ParamField>
+
+<ParamField path="arguments" type="list">
+  List of argument objects. Each argument has `name`, `description`, `required` (bool), `isArray` (bool), and optionally `predefined` (list of allowed values) and `defaultValue`.
+</ParamField>
+
+<ParamField path="outputs" type="list">
+  List of output objects. Each output has `contextPath` (dot-notation path in the incident context), `description`, and `type` (`String`, `Number`, `Boolean`, `Date`, `Unknown`).
+</ParamField>
+
+```yaml
+script:
+  commands:
+    - name: myvendor-get-alert
+      description: Returns a single alert by its ID.
+      arguments:
+        - name: alert_id
+          description: The unique ID of the alert to retrieve.
+          required: true
+          isArray: false
+        - name: include_raw
+          description: Whether to include the raw alert payload in the response.
+          required: false
+          isArray: false
+          predefined:
+            - 'true'
+            - 'false'
+      outputs:
+        - contextPath: MyVendor.Alert.ID
+          description: The unique ID of the alert.
+          type: String
+        - contextPath: MyVendor.Alert.Severity
+          description: The severity level of the alert.
+          type: String
+        - contextPath: MyVendor.Alert.Created
+          description: The date and time the alert was created.
+          type: Date
+        - contextPath: MyVendor.Alert.IsActive
+          description: Whether the alert is currently active.
+          type: Boolean
+```
+
+## The `script.dockerimage` Field
+
+```yaml
+script:
+  dockerimage: demisto/python3:3.7.4.977
+```
+
+The `dockerimage` field specifies the Docker image that XSOAR uses to run this integration. This is the **only** mechanism for declaring Python dependencies — you cannot `pip install` packages at runtime. If your integration needs `requests`, `boto3`, or any third-party library, the Docker image must include it.
+
+Choose an image from the `demisto` Docker Hub organisation that already contains the packages you need, or create a custom image using the `demisto/python3` base. The image tag pins the exact dependency versions, ensuring reproducible builds.
+
+<Warning>
+  After editing the YAML, always run `demisto-sdk format -i <path>` to fix formatting and structure issues automatically. The SDK normalises field ordering, removes unknown keys, and validates values against the XSOAR content schema. Running format before committing prevents CI failures.
+</Warning>
+
+## Parameter Type Reference
+
+| Type Code | UI Widget | Common Use |
+|---|---|---|
+| `0` | Plain text input | Server URL, query strings, named fields |
+| `8` | Boolean checkbox | `proxy`, `insecure`, `isFetch` flags |
+| `9` | Username + password pair | Credentials with both fields; set `hiddenusername: true` for API key-only |
+| `4` | Encrypted text (masked) | Single API keys and tokens |
+| `16` | Multi-select dropdown | Severity filters, log level selectors |
+| `13` | Incident type selector | `incidentType` field for fetch-incidents |
+| `15` | Single-select dropdown | Options driven by the `options` list |
+| `19` | Number input | Polling intervals, result limits |
+
+<Tip>
+  Use `additionalinfo` on sensitive fields (like `apikey` and `credentials`) to tell administrators exactly where to find the value in the vendor's portal. This reduces support load and speeds up onboarding.
+</Tip>

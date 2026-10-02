@@ -1,0 +1,278 @@
+---
+title: "DBotScore Types and Reliability Reference for XSOAR Threat Intel"
+sidebarTitle: "DBotScore"
+description: "Reference for DBotScoreType, DBotScoreReliability, and Common.DBotScore — the standard threat intelligence indicator scoring types in CommonServerPython."
+---
+
+The DBotScore system is the XSOAR standard for communicating indicator reputation. Every enrichment integration produces a `Common.DBotScore` object attached to an indicator (`Common.IP`, `Common.URL`, `Common.Domain`, etc.) which the platform renders as a colored score badge in the War Room and in the indicator's summary panel. All three classes — `DBotScoreType`, `DBotScoreReliability`, and `Common.DBotScore` — are available after `from CommonServerPython import *`.
+
+---
+
+## Numeric Score Values
+
+The four score levels are defined as integer constants on `Common.DBotScore`:
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `Common.DBotScore.NONE` | `0` | Unknown — no reputation data available |
+| `Common.DBotScore.GOOD` | `1` | Good — indicator is known to be benign |
+| `Common.DBotScore.SUSPICIOUS` | `2` | Suspicious — indicator shows signs of malicious activity |
+| `Common.DBotScore.BAD` | `3` | Bad — indicator is confirmed malicious |
+
+---
+
+## `class DBotScoreType`
+
+String constants that identify the category of an indicator. Pass one of these to `Common.DBotScore(indicator_type=...)`.
+
+```python
+class DBotScoreType(object):
+    IP = 'ip'
+    FILE = 'file'
+    DOMAIN = 'domain'
+    URL = 'url'
+    CVE = 'cve'
+    ACCOUNT = 'account'
+    CIDR = 'cidr'
+    DOMAINGLOB = 'domainglob'
+    CERTIFICATE = 'certificate'
+    CRYPTOCURRENCY = 'cryptocurrency'
+    EMAIL = 'email'
+    ATTACKPATTERN = 'attackpattern'
+    CUSTOM = 'custom'
+```
+
+| Constant | Value | Use Case |
+|---|---|---|
+| `DBotScoreType.IP` | `'ip'` | IPv4 or IPv6 address reputation |
+| `DBotScoreType.FILE` | `'file'` | File hash (MD5, SHA1, SHA256, SHA512) reputation |
+| `DBotScoreType.DOMAIN` | `'domain'` | Domain name reputation |
+| `DBotScoreType.URL` | `'url'` | Full URL reputation |
+| `DBotScoreType.CVE` | `'cve'` | CVE vulnerability identifier |
+| `DBotScoreType.ACCOUNT` | `'account'` | User account reputation |
+| `DBotScoreType.CIDR` | `'cidr'` | IP CIDR range |
+| `DBotScoreType.DOMAINGLOB` | `'domainglob'` | Wildcard domain pattern (e.g. `*.evil.com`) |
+| `DBotScoreType.CERTIFICATE` | `'certificate'` | X.509 certificate |
+| `DBotScoreType.CRYPTOCURRENCY` | `'cryptocurrency'` | Cryptocurrency wallet address |
+| `DBotScoreType.EMAIL` | `'email'` | Email address reputation |
+| `DBotScoreType.ATTACKPATTERN` | `'attackpattern'` | MITRE ATT&CK technique |
+| `DBotScoreType.CUSTOM` | `'custom'` | Custom indicator type |
+
+### Validation
+
+```python
+DBotScoreType.is_valid_type('ip')     # True
+DBotScoreType.is_valid_type('foobar') # False
+```
+
+---
+
+## `class DBotScoreReliability`
+
+Reliability grades that communicate the trustworthiness of the source that produced a score. Pass one of these string constants to `Common.DBotScore(reliability=...)`.
+
+```python
+class DBotScoreReliability(object):
+    A_PLUS_PLUS = 'A++ - Reputation script'
+    A_PLUS     = 'A+ - 3rd party enrichment'
+    A          = 'A - Completely reliable'
+    B          = 'B - Usually reliable'
+    C          = 'C - Fairly reliable'
+    D          = 'D - Not usually reliable'
+    E          = 'E - Unreliable'
+    F          = 'F - Reliability cannot be judged'
+```
+
+| Constant | String Value | Intended Use |
+|---|---|---|
+| `DBotScoreReliability.A_PLUS_PLUS` | `'A++ - Reputation script'` | Internal reputation scripts with full context |
+| `DBotScoreReliability.A_PLUS` | `'A+ - 3rd party enrichment'` | Premium commercial threat intel feeds |
+| `DBotScoreReliability.A` | `'A - Completely reliable'` | Highly trusted sources |
+| `DBotScoreReliability.B` | `'B - Usually reliable'` | Generally trustworthy sources |
+| `DBotScoreReliability.C` | `'C - Fairly reliable'` | Community or open-source feeds |
+| `DBotScoreReliability.D` | `'D - Not usually reliable'` | Sources that are occasionally unreliable |
+| `DBotScoreReliability.E` | `'E - Unreliable'` | Sources with low confidence |
+| `DBotScoreReliability.F` | `'F - Reliability cannot be judged'` | Unknown or untested sources |
+
+---
+
+## `Common.DBotScore`
+
+The `Common.DBotScore` class is nested inside `Common` and represents a complete reputation verdict for a single indicator value.
+
+### Constructor
+
+```python
+Common.DBotScore(
+    indicator,
+    indicator_type,
+    integration_name='',
+    score=None,
+    malicious_description=None,
+    reliability=None,
+    message=None,
+)
+```
+
+<ParamField path="indicator" type="str" required>
+  The raw indicator value, for example `'8.8.8.8'`, `'evil.com'`, or a SHA256 hash string.
+</ParamField>
+
+<ParamField path="indicator_type" type="DBotScoreType" required>
+  One of the `DBotScoreType` string constants, for example `DBotScoreType.IP`. Raises `TypeError` if not a valid type.
+</ParamField>
+
+<ParamField path="integration_name" type="str" default="''">
+  The name of the integration or vendor providing the score. For integrations this is auto-detected from the calling context; for scripts it must be provided explicitly.
+</ParamField>
+
+<ParamField path="score" type="int" required>
+  One of `Common.DBotScore.NONE` (0), `Common.DBotScore.GOOD` (1), `Common.DBotScore.SUSPICIOUS` (2), or `Common.DBotScore.BAD` (3). Raises `TypeError` if not a valid score value.
+</ParamField>
+
+<ParamField path="malicious_description" type="str">
+  A human-readable explanation shown when `score` is `Common.DBotScore.BAD`. For example: `'Known C2 server associated with Lazarus Group'`.
+</ParamField>
+
+<ParamField path="reliability" type="DBotScoreReliability">
+  The reliability grade of the source. Must be a valid `DBotScoreReliability` constant. Raises `TypeError` if set to an invalid value.
+</ParamField>
+
+<ParamField path="message" type="str">
+  An optional message about the API response, for example `'Not found'` when the vendor has no data on the indicator.
+</ParamField>
+
+### Context Standard
+
+When `Common.DBotScore.to_context()` is called (via `CommandResults`), it writes to the following context paths:
+
+| Context Key | Description |
+|---|---|
+| `DBotScore.Indicator` | The indicator value |
+| `DBotScore.Type` | The indicator type string |
+| `DBotScore.Vendor` | The integration name |
+| `DBotScore.Score` | The integer score (0–3) |
+| `DBotScore.Reliability` | The reliability string (when set) |
+
+---
+
+## Indicator Classes
+
+### `Common.IP`
+
+```python
+Common.IP(ip, dbot_score, asn=None, as_owner=None, region=None, port=None,
+          internal=None, hostname=None, geo_latitude=None, geo_longitude=None,
+          geo_country=None, geo_description=None, detection_engines=None,
+          positive_engines=None, organization_name=None, organization_type=None,
+          tags=None, malware_family=None, relationships=None, ...)
+```
+
+Context path: `IP(val.Address && val.Address == obj.Address)`
+
+| Key Parameter | Type | Description |
+|---|---|---|
+| `ip` | `str` | The IP address value (required). |
+| `dbot_score` | `Common.DBotScore` | Reputation score (required). |
+| `asn` | `str` | Autonomous system number, e.g. `'AS8948'`. |
+| `hostname` | `str` | Hostname mapped to this IP. |
+| `geo_country` | `str` | Country where the IP is located. |
+| `geo_description` | `str` | Additional geolocation description. |
+| `organization_name` | `str` | Organization owning the IP. |
+
+### `Common.URL`
+
+```python
+Common.URL(url, dbot_score, detection_engines=None, positive_detections=None,
+           category=None, tags=None, port=None, internal=None, campaign=None,
+           asn=None, as_owner=None, geo_country=None, organization=None, ...)
+```
+
+Context path: `URL(val.Data && val.Data == obj.Data)`
+
+### `Common.Domain`
+
+```python
+Common.Domain(domain, dbot_score, dns=None, detection_engines=None,
+              positive_detections=None, organization=None, creation_date=None,
+              updated_date=None, expiration_date=None, domain_status=None,
+              name_servers=None, registrar_name=None, registrant_name=None,
+              registrant_email=None, tags=None, relationships=None, ...)
+```
+
+Context path: `Domain(val.Name && val.Name == obj.Name)`
+
+### `Common.File`
+
+```python
+Common.File(name=None, entry_id=None, size=None, md5=None, sha1=None,
+            sha256=None, sha512=None, ssdeep=None, extension=None,
+            file_type=None, hostname=None, path=None, company=None,
+            product_name=None, dbot_score=None, tags=None, relationships=None, ...)
+```
+
+Context path: `File(val.MD5 && val.MD5 == obj.MD5 || val.SHA1 && val.SHA1 == obj.SHA1 || val.SHA256 && val.SHA256 == obj.SHA256)`
+
+---
+
+## Complete Example: Scoring an IP Indicator
+
+```python
+from CommonServerPython import *
+
+def ip_command(client, args):
+    ip_value = args.get('ip', '')
+    result = client.get_reputation(ip_value)
+
+    # Determine score
+    malicious = result.get('malicious', False)
+    suspicious = result.get('suspicious', False)
+
+    if malicious:
+        score = Common.DBotScore.BAD
+        malicious_description = result.get('reason', 'Flagged as malicious by vendor')
+    elif suspicious:
+        score = Common.DBotScore.SUSPICIOUS
+        malicious_description = None
+    else:
+        score = Common.DBotScore.GOOD
+        malicious_description = None
+
+    # Build DBotScore
+    dbot_score = Common.DBotScore(
+        indicator=ip_value,
+        indicator_type=DBotScoreType.IP,
+        integration_name='MyThreatIntel',
+        score=score,
+        malicious_description=malicious_description,
+        reliability=DBotScoreReliability.B,
+    )
+
+    # Build IP indicator
+    ip_indicator = Common.IP(
+        ip=ip_value,
+        dbot_score=dbot_score,
+        asn=result.get('asn'),
+        geo_country=result.get('country'),
+        organization_name=result.get('org'),
+    )
+
+    readable = tableToMarkdown(
+        f'IP Reputation: {ip_value}',
+        {
+            'IP': ip_value,
+            'Score': dbot_score.to_readable(),
+            'ASN': result.get('asn'),
+            'Country': result.get('country'),
+        },
+    )
+
+    return CommandResults(
+        outputs_prefix='MyThreatIntel.IP',
+        outputs_key_field='Address',
+        outputs={'Address': ip_value, **result},
+        readable_output=readable,
+        raw_response=result,
+        indicator=ip_indicator,
+    )
+```

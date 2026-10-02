@@ -1,0 +1,255 @@
+---
+title: "Incident Fetching: Pulling Alerts into Cortex XSOAR Automatically"
+sidebarTitle: "Incident Fetching"
+description: "Configure a Cortex XSOAR integration to fetch incidents from an external product by implementing the fetch-incidents command and setting isFetch in the YAML configuration."
+---
+
+Cortex XSOAR can continuously pull alerts, events, and cases from external products and automatically create XSOAR incidents from them. This is called **incident fetching**. Instead of requiring an analyst to manually trigger enrichment, a fetch-enabled integration runs on a configurable schedule, queries the external API for anything new since the last run, and hands the results to XSOAR as native incidents that can trigger playbooks, fire notifications, and appear on dashboards.
+
+## How Incident Fetching Works
+
+XSOAR calls the special `fetch-incidents` command on every configured interval (default: one minute). The integration must:
+
+1. Read its own state (the last fetch timestamp or last fetched ID) from `demisto.getLastRun()`.
+2. Query the external product for events newer than that state.
+3. Convert each event into an incident dictionary.
+4. Persist the new state with `demisto.setLastRun()`.
+5. Return the incident list via `demisto.incidents()`.
+
+XSOAR guarantees that `fetch-incidents` is called serially — a new call will not start until the previous one has returned — so you can safely read and write last-run state without locking.
+
+## Required YAML Changes
+
+Two changes are needed in the integration's `.yml` configuration file.
+
+### 1. Set `isfetch: true` on the `script` block
+
+```yaml
+script:
+  script: ''
+  type: python
+  subtype: python3
+  isfetch: true          # ← marks this integration as fetch-capable
+  dockerimage: demisto/python3:3.11.9.107520
+```
+
+### 2. Add fetch-related parameters
+
+```yaml
+configuration:
+  - name: isFetch
+    display: Fetch incidents
+    type: 8              # type 8 = Boolean
+    required: false
+
+  - name: max_fetch
+    display: Maximum number of incidents per fetch
+    defaultvalue: '50'
+    type: 0              # type 0 = Short text
+    required: false
+
+  - name: first_fetch
+    display: First fetch time (e.g. 3 days, 1 week, 2 hours)
+    defaultvalue: '3 days'
+    type: 0
+    required: false
+
+  - name: incidentType
+    display: Incident type
+    type: 13             # type 13 = Incident type selector
+    required: false
+```
+
+## Implementing `fetch_incidents` in Python
+
+The fetch function follows a consistent pattern across all integrations. Below is an annotated reference implementation.
+
+```python
+import demistomock as demisto
+from CommonServerPython import *
+from datetime import datetime, timezone
+
+
+def fetch_incidents(
+    client: Client,
+    max_fetch: int,
+    first_fetch: str,
+) -> None:
+    """
+    Fetch new incidents from the external product and push them to XSOAR.
+
+    :param client: Authenticated API client.
+    :param max_fetch: Maximum incidents to return in one run.
+    :param first_fetch: Human-readable lookback string for the very first run,
+                        e.g. '3 days' or '1 week'.
+    """
+    # ------------------------------------------------------------------
+    # 1. Read the last saved state (timestamp or ID from the previous run)
+    # ------------------------------------------------------------------
+    last_run: dict = demisto.getLastRun()
+    last_fetch_time: str = last_run.get('time', '')
+
+    if not last_fetch_time:
+        # First ever run — parse the "first_fetch" integration parameter
+        first_fetch_dt = dateparser.parse(
+            first_fetch,
+            settings={'RETURN_AS_TIMEZONE_AWARE': True},
+        )
+        last_fetch_time = first_fetch_dt.strftime('%Y-%m-%dT%H:%M:%SZ')  # type: ignore
+
+    # ------------------------------------------------------------------
+    # 2. Query the external API for events newer than last_fetch_time
+    # ------------------------------------------------------------------
+    raw_events = client.get_events(
+        since=last_fetch_time,
+        limit=max_fetch,
+    )
+
+    # ------------------------------------------------------------------
+    # 3. Convert each raw event into an XSOAR incident dict
+    # ------------------------------------------------------------------
+    incidents: list[dict] = []
+    latest_event_time = last_fetch_time
+
+    for event in raw_events:
+        event_time: str = event.get('created_at', '')
+
+        incident = {
+            # Required fields
+            'name':      f"MyVendor Alert: {event.get('title', 'Unknown')}",
+            'occurred':  event_time,                # ISO 8601 string
+            'rawJSON':   json.dumps(event),         # full raw event as JSON string
+
+            # Optional fields
+            'severity':  convert_severity(event.get('severity', 'unknown')),
+            'type':      'MyVendor Incident',       # matches an XSOAR incident type
+        }
+        incidents.append(incident)
+
+        # Track the most recent event time for the next run
+        if event_time > latest_event_time:
+            latest_event_time = event_time
+
+    # ------------------------------------------------------------------
+    # 4. Persist state so the next run starts from where this one left off
+    # ------------------------------------------------------------------
+    demisto.setLastRun({'time': latest_event_time})
+
+    # ------------------------------------------------------------------
+    # 5. Push incidents to XSOAR
+    # ------------------------------------------------------------------
+    demisto.incidents(incidents)
+
+
+def convert_severity(vendor_severity: str) -> int:
+    """Map vendor severity strings to XSOAR severity integers (0–4)."""
+    mapping = {
+        'informational': IncidentSeverity.INFO,
+        'low':           IncidentSeverity.LOW,
+        'medium':        IncidentSeverity.MEDIUM,
+        'high':          IncidentSeverity.HIGH,
+        'critical':      IncidentSeverity.CRITICAL,
+    }
+    return mapping.get(vendor_severity.lower(), IncidentSeverity.UNKNOWN)
+```
+
+<Warning>
+Always call `demisto.setLastRun()` **before** `demisto.incidents()` in a successful fetch run. If XSOAR stores the state only after incidents are created, a mid-run crash could leave state pointing to an earlier window and cause duplicates on the next execution.
+</Warning>
+
+## Required Incident Dictionary Fields
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | `str` | ✅ | Human-readable incident title shown in the incidents list |
+| `occurred` | `str` | ✅ | ISO 8601 timestamp (`2024-01-15T14:30:00Z`) |
+| `rawJSON` | `str` | ✅ | Full event serialized as a JSON string; XSOAR parses this into incident fields |
+| `severity` | `int` | — | `0` Unknown, `1` Info, `2` Low, `3` Medium, `4` High, `5` Critical |
+| `type` | `str` | — | Maps to an XSOAR incident type; triggers the appropriate playbook |
+| `details` | `str` | — | Additional free-text description |
+| `labels` | `list[dict]` | — | List of `{'type': ..., 'value': ...}` tag objects |
+
+## Wiring It Up in `main()`
+
+```python
+def main() -> None:
+    params  = demisto.params()
+    command = demisto.command()
+
+    client = Client(
+        base_url=params.get('url', '').rstrip('/'),
+        verify=not params.get('insecure', False),
+        proxy=params.get('proxy', False),
+        headers={'Authorization': f"Bearer {params.get('api_key')}"},
+    )
+
+    max_fetch  = int(params.get('max_fetch') or 50)
+    first_fetch = params.get('first_fetch') or '3 days'
+
+    try:
+        if command == 'test-module':
+            client.test_connection()
+            return_results('ok')
+
+        elif command == 'fetch-incidents':
+            fetch_incidents(client, max_fetch, first_fetch)
+
+        else:
+            raise NotImplementedError(f'Command {command!r} is not implemented.')
+
+    except Exception as e:
+        return_error(f'Failed to execute {command}. Error: {e}')
+
+
+if __name__ in ('__main__', '__builtin__', 'builtins'):
+    main()
+```
+
+## Common Fetch Parameters Reference
+
+<CardGroup cols={2}>
+  <Card title="max_fetch" icon="list-ol">
+    Maximum number of incidents returned in a single fetch run. Prevents XSOAR
+    from being overwhelmed during high-volume periods. Typical default: `50`.
+  </Card>
+  <Card title="first_fetch" icon="clock">
+    The lookback window used only on the **very first** run when no previous
+    state exists. Accepts human-readable strings like `3 days`, `1 week`,
+    `12 hours`.
+  </Card>
+  <Card title="incidentType" icon="tag">
+    The default XSOAR incident type to assign to fetched incidents. Controls
+    which playbook is automatically triggered. Users override this in the
+    integration instance configuration.
+  </Card>
+  <Card title="isFetch" icon="toggle-on">
+    Boolean parameter that the XSOAR server reads to know whether to schedule
+    the `fetch-incidents` command for this integration instance.
+  </Card>
+</CardGroup>
+
+## Incident Mirroring
+
+Beyond one-way fetching, XSOAR supports **bidirectional mirroring** — keeping an XSOAR incident synchronized with the remote system after it is created. Mirroring requires implementing three additional commands.
+
+```yaml
+# Integration YAML — mirroring parameter
+- name: mirror_direction
+  display: Incident Mirroring Direction
+  defaultvalue: None
+  type: 15              # type 15 = select
+  options:
+    - None
+    - Incoming
+    - Outgoing
+    - Both
+  required: false
+```
+
+| Command | Direction | Purpose |
+|---|---|---|
+| `get-remote-data` | Remote → XSOAR | Pull the latest state of a specific remote incident into XSOAR |
+| `update-remote-system` | XSOAR → Remote | Push XSOAR incident changes back to the remote system |
+| `get-modified-remote-data` | Remote → XSOAR | Return a list of remote incident IDs that have changed since a given timestamp (used to limit polling) |
+
+Each command receives arguments via `demisto.args()` and must return the appropriate `GetRemoteDataResponse`, `UpdateRemoteSystemResponse`, or `GetModifiedRemoteDataResponse` objects from `CommonServerPython`.

@@ -1,0 +1,213 @@
+---
+title: "pack_metadata.json Schema Reference for XSOAR Content Packs"
+sidebarTitle: "pack_metadata.json"
+description: "Every Cortex XSOAR Pack requires a pack_metadata.json file. This reference documents every field, its type, and whether it is required for marketplace submission."
+---
+
+Every Cortex XSOAR Content Pack must contain a `pack_metadata.json` file at the root of the Pack directory (`Packs/<PackName>/pack_metadata.json`). This file supplies the information displayed in the XSOAR Marketplace: name, description, support tier, version, author, categories, and dependency declarations. Without a valid `pack_metadata.json`, the Pack cannot be uploaded to the Marketplace or validated by the content CI pipeline.
+
+---
+
+## Canonical Example
+
+The following is the real `pack_metadata.json` for the `CommonScripts` Pack, which ships with every XSOAR installation:
+
+```json
+{
+    "name": "Common Scripts",
+    "description": "Frequently used scripts pack.",
+    "support": "xsoar",
+    "currentVersion": "1.22.58",
+    "author": "Cortex XSOAR",
+    "url": "https://www.paloaltonetworks.com/cortex",
+    "email": "",
+    "created": "2020-05-14T08:33:25Z",
+    "categories": [
+        "Utilities"
+    ],
+    "tags": [
+        "Core"
+    ],
+    "useCases": [],
+    "keywords": [],
+    "dependencies": {
+        "DemistoRESTAPI": {
+            "mandatory": true,
+            "display_name": "Demisto REST API"
+        },
+        "FeedMitreAttackv2": {
+            "mandatory": false,
+            "display_name": "MITRE ATT&CK v2"
+        },
+        "Gmail": {
+            "mandatory": false,
+            "display_name": "Gmail"
+        },
+        "MailSenderNew": {
+            "mandatory": false,
+            "display_name": "Mail Sender (New)"
+        },
+        "GmailSingleUser": {
+            "mandatory": false,
+            "display_name": "Gmail Single User (Beta)"
+        },
+        "MicrosoftGraphMail": {
+            "mandatory": false,
+            "display_name": "Microsoft Graph Mail"
+        },
+        "MicrosoftGraphListener": {
+            "mandatory": false,
+            "display_name": "Microsoft Graph Mail Single User"
+        },
+        "RemoteAccess": {
+            "mandatory": false,
+            "display_name": "RemoteAccess v2"
+        }
+    },
+    "excludedDependencies": [
+        "GoogleMaps",
+        "Slack"
+    ],
+    "marketplaces": [
+        "xsoar",
+        "marketplacev2",
+        "xpanse",
+        "platform"
+    ],
+    "supportedModules": [
+        "asm",
+        "exposure_management",
+        "agentix",
+        "cloud",
+        "cloud_runtime_security",
+        "cloud_posture",
+        "xsiam",
+        "edr",
+        "xti",
+        "tim"
+    ]
+}
+```
+
+---
+
+## Field Reference
+
+<ParamField path="name" type="string" required>
+  The human-readable display name shown in the Marketplace listing and Pack detail page. Keep it concise (typically 2–5 words). Example: `"Common Scripts"`, `"Cortex XDR - IR"`.
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  A short one-sentence description displayed under the Pack name in Marketplace search results. Should describe what the Pack does, not who made it. Example: `"Frequently used scripts pack."`.
+</ParamField>
+
+<ParamField path="support" type="string" required>
+  The support tier for the Pack. Determines who is responsible for maintaining and supporting the Pack. Valid values:
+
+  | Value | Description |
+  |---|---|
+  | `"xsoar"` | Maintained and supported by Palo Alto Networks / Cortex XSOAR team |
+  | `"partner"` | Maintained by a certified technology partner |
+  | `"community"` | Maintained by the open-source community (best-effort support) |
+</ParamField>
+
+<ParamField path="currentVersion" type="string" required>
+  The Pack's semantic version string in `MAJOR.MINOR.PATCH` format, for example `"1.22.58"`. Must be incremented on every change submitted to the Marketplace. The CI pipeline validates that this version is higher than the previously released version.
+</ParamField>
+
+<ParamField path="author" type="string" required>
+  The author name displayed in the Marketplace. For `support: xsoar` Packs this is typically `"Cortex XSOAR"`. For partner Packs, use the company name. For community Packs, use the contributor's name or organisation.
+</ParamField>
+
+<ParamField path="url" type="string">
+  A URL where users can find support documentation or open a support ticket. For Palo Alto Networks Packs this is `"https://www.paloaltonetworks.com/cortex"`. For partner Packs, link to the vendor's support portal.
+</ParamField>
+
+<ParamField path="email" type="string">
+  Support contact email address. Can be an empty string `""` if a URL is provided instead.
+</ParamField>
+
+<ParamField path="created" type="string">
+  ISO 8601 UTC timestamp recording when the Pack was first created, for example `"2020-05-14T08:33:25Z"`. Set once at Pack creation and never modified.
+</ParamField>
+
+<ParamField path="categories" type="array" required>
+  An array of Marketplace category strings. Each Pack must have at least one category. Valid category values include:
+
+  - `"Analytics & SIEM"`
+  - `"Authentication & Identity Management"`
+  - `"Case Management"`
+  - `"Cloud Services"`
+  - `"Data Enrichment & Threat Intelligence"`
+  - `"Email"`
+  - `"Endpoint"`
+  - `"Forensics & Malware Analysis"`
+  - `"IT Services"`
+  - `"Network Security"`
+  - `"Utilities"`
+  - `"Vulnerability Management"`
+</ParamField>
+
+<ParamField path="tags" type="array">
+  An array of short tag strings that make the Pack discoverable in Marketplace search and filtering. Examples: `"Core"`, `"TIM"`, `"XSOAR Recommended"`, `"Malware"`.
+</ParamField>
+
+<ParamField path="useCases" type="array">
+  An array of use-case classification strings. Used for Marketplace filtering. Examples: `"Phishing"`, `"Malware"`, `"Endpoint"`, `"Identity And Access Management"`.
+</ParamField>
+
+<ParamField path="keywords" type="array">
+  Additional search keyword strings to improve Marketplace discoverability. These are not displayed in the UI but are indexed for search.
+</ParamField>
+
+<ParamField path="dependencies" type="object">
+  An object whose keys are Pack IDs (the directory name under `Packs/`) and whose values are dependency descriptor objects. The platform uses this to ensure dependent Packs are installed before the current Pack.
+
+  Each dependency descriptor has:
+
+  | Field | Type | Description |
+  |---|---|---|
+  | `mandatory` | `bool` | `true` if the Pack cannot function without this dependency; `false` if it is optional. |
+  | `display_name` | `string` | Human-readable name of the dependency Pack, shown in the Marketplace dependency graph. |
+
+  ```json
+  "dependencies": {
+      "DemistoRESTAPI": {
+          "mandatory": true,
+          "display_name": "Demisto REST API"
+      }
+  }
+  ```
+</ParamField>
+
+<ParamField path="excludedDependencies" type="array">
+  An array of Pack IDs that should be explicitly excluded from the automatically computed dependency graph. Useful when a script or integration optionally references another Pack's commands but you do not want to create a hard dependency.
+</ParamField>
+
+<ParamField path="marketplaces" type="array">
+  An array of Marketplace identifiers indicating which XSOAR deployment types can install this Pack. Valid values:
+
+  | Value | Platform |
+  |---|---|
+  | `"xsoar"` | Cortex XSOAR 6.x (on-premises and cloud) |
+  | `"marketplacev2"` | Cortex XSOAR 8.x |
+  | `"xpanse"` | Cortex Xpanse |
+  | `"platform"` | Cortex platform (XSIAM / unified platform) |
+</ParamField>
+
+<ParamField path="supportedModules" type="array">
+  An array of platform module identifiers indicating which licensed modules can use this Pack. Valid values include:
+
+  | Value | Module |
+  |---|---|
+  | `"asm"` | Attack Surface Management |
+  | `"exposure_management"` | Exposure Management |
+  | `"agentix"` | Agentix (AI-powered automation) |
+  | `"cloud"` | Cloud Security |
+  | `"cloud_runtime_security"` | Cloud Runtime Security |
+  | `"cloud_posture"` | Cloud Posture Management |
+  | `"xsiam"` | Cortex XSIAM |
+  | `"edr"` | Endpoint Detection & Response |
+  | `"xti"` | Extended Threat Intelligence |
+  | `"tim"` | Threat Intelligence Management |
+</ParamField>

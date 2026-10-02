@@ -1,0 +1,98 @@
+---
+title: "Cortex XSOAR Playbooks: Automated Incident Response Workflows"
+sidebarTitle: "Overview"
+description: "Playbooks are visual, automated workflows that orchestrate security tools, analysts, and decisions to respond to incidents consistently at scale on Cortex XSOAR."
+---
+
+Playbooks are the core execution engine of Cortex XSOAR. They model incident response and investigation workflows as directed acyclic graphs (DAGs) — a series of tasks with explicit sequencing and branching logic that drives automated action across your security stack. Every time a new incident is triggered, XSOAR can automatically invoke a playbook that runs enrichment, fires response actions, routes manual tasks to analysts, and closes the loop — all without human intervention unless a decision point requires it.
+
+<Note>
+  Playbooks are defined as YAML files following the **COPS** (Common Open Playbook Standard) format. Use the XSOAR visual editor to build them in the platform UI and export to YAML for version control. The COPS specification is maintained at [github.com/demisto/COPS](https://github.com/demisto/COPS).
+</Note>
+
+## What Is a Playbook?
+
+A playbook is a structured, repeatable procedure for handling a class of security event. Rather than relying on tribal knowledge or ad-hoc analyst judgement, a playbook encodes your SOC's best-practice response steps directly into the platform. Once deployed, that procedure runs the same way every time — at machine speed and at any volume.
+
+Under the hood a playbook is a YAML document whose `tasks` map defines the graph. Each task is a node; each `nexttasks` reference is a directed edge. XSOAR walks the graph from `starttaskid` forward, executing tasks in dependency order, branching on condition outputs, and waiting on manual tasks before proceeding.
+
+## COPS — The Open Playbook Format
+
+The COPS (Common Open Playbook Standard) format is an open standard that Cortex XSOAR uses to represent playbooks as portable YAML files. Because playbooks are text, they can be:
+
+- Stored in Git alongside your other content
+- Reviewed and approved through standard pull-request workflows
+- Shared with the community via the `demisto/content` repository
+- Imported and exported between XSOAR tenants
+
+## Task Types
+
+Every node in a playbook is a task with a specific `type` value that determines how XSOAR executes it.
+
+| Task Type | Description |
+|-----------|-------------|
+| `start` | The single entry point of every playbook. Execution begins here. |
+| `title` | A visual section header with no execution logic; organises the graph into labelled phases. |
+| `regular` | Executes an integration command or built-in script. Results are written to the incident context. |
+| `condition` | Evaluates a branching expression against context values and routes execution along the matching path (if/else logic). |
+| `playbook` | Calls another playbook as a sub-playbook, passing inputs and collecting outputs on completion. |
+| `timer` | Starts or stops an SLA timer field on the incident. |
+
+In addition, tasks can be configured as **manual** — they pause execution and create a work item for a human analyst to complete before the playbook continues.
+
+## The Incident Context
+
+Every incident has a shared key-value store called the **incident context** (or war-room context). It is the backbone that connects tasks together:
+
+- Integration commands and scripts write their outputs into the context under typed paths such as `IP.Address`, `File.MD5`, or `DBotScore.Score`.
+- Subsequent tasks read from the context using XSOAR's DT (Demisto Transform) expression language to reference values set by earlier tasks.
+- Condition tasks compare context values against thresholds to branch execution.
+- Sub-playbooks receive inputs from the parent context and return outputs back into it.
+
+This design decouples producers (integrations) from consumers (subsequent tasks), so a playbook that calls `ip` enrichment against any enabled integration automatically benefits from all results written to the standard `IP` context path.
+
+## Common Playbook Categories
+
+The `demisto/content` repository ships over 1,300 Packs containing playbooks grouped by use case. The most common categories include:
+
+**Entity Enrichment** — Resolve IP addresses, domains, URLs, files, email addresses, and user accounts against threat-intelligence integrations and internal data sources. Examples: `Entity Enrichment - Generic v3`, `IP Enrichment - Generic v2`, `Domain Enrichment - Generic v2`, `Email Address Enrichment - Generic v2.1`.
+
+**Block IOC** — Push malicious indicators to network controls (firewalls, WAFs, proxies) and identity stores. Examples: `Block IP - Generic v3`, `Block Domain - Generic v2`, `Block URL - Generic v2`, `Block Account - Generic v2`, `Block Indicators - Generic v3`.
+
+**Incident Investigation** — Collect forensic evidence, search SIEMs, and correlate alerts. Examples: `Endpoint Investigation Plan`, `User Investigation - Generic`, `Cloud User Investigation - Generic`, `Threat Hunting - Generic`.
+
+**Containment & Eradication** — Isolate endpoints, disable accounts, quarantine files, and terminate processes. Examples: `Containment Plan`, `Isolate Endpoint - Generic V2`, `Eradication Plan`, `Containment Plan - Isolate Device`.
+
+**Severity Calculation** — Normalise and assign incident severity from multiple signal sources. Examples: `Calculate Severity - Generic v2`, `Calculate Severity - Critical Assets v2`, `Calculate Severity By Highest DBotScore`.
+
+**Cloud Security** — Investigate and respond to cloud infrastructure events. Examples: `Cloud Enrichment - Generic`, `Cloud Response - Generic`, `Cloud Credentials Rotation - Generic`, `Cloud Compute Enrichment - Generic`.
+
+**Utility** — Cross-cutting helpers used as sub-playbooks inside other workflows. Examples: `GenericPolling`, `Dedup - Generic v4`, `Wait Until Datetime`, `Context Polling - Generic`.
+
+## Playbooks in the CommonPlaybooks Pack
+
+The `Packs/CommonPlaybooks` pack ships the reusable building blocks that most other packs depend on. A selection of real playbooks from that pack:
+
+| Playbook | Purpose |
+|----------|---------|
+| `Entity Enrichment - Generic v3` | Fans out to all entity-specific enrichment sub-playbooks for IP, domain, URL, file, email, and account. |
+| `Block IP - Generic v3` | Blocks a malicious IP on every enabled firewall/WAF integration (Check Point, PAN-OS, Zscaler, FortiGate, and more). |
+| `Block Account - Generic v2` | Disables a compromised account across Active Directory and PAN-OS. |
+| `Calculate Severity - Generic v2` | Computes incident severity from DBotScores, critical assets, email authenticity, and XDR risk signals. |
+| `Containment Plan` | Orchestrates endpoint isolation, account disabling, indicator blocking, and session clearing. |
+| `Eradication Plan` | Deletes malicious files, terminates processes, and resets compromised passwords. |
+| `GenericPolling` | Polls an asynchronous job (sandbox detonation, scan, etc.) on a schedule until it completes. |
+| `Dedup - Generic v4` | Closes duplicate incidents and links them to the canonical investigation. |
+| `Search And Delete Emails - Generic` | Hunts for and removes phishing emails from mailboxes across email providers. |
+| `Detonate File - Generic` | Submits a file to every enabled sandbox integration and collects verdicts. |
+| `CVE Enrichment - Generic v2` | Enriches CVE indicators with NVD and vendor advisory data. |
+| `Threat Hunting - Generic` | Queries SIEMs and EDR platforms for threat-hunting queries across the environment. |
+
+<CardGroup cols={2}>
+  <Card title="Creating Playbooks" icon="hammer" href="/playbooks/creating-playbooks">
+    Learn the YAML structure, task types, and packaging conventions for building your own playbooks.
+  </Card>
+  <Card title="Context and Outputs" icon="database" href="/concepts/context-and-outputs">
+    Understand how tasks read from and write to the incident context that connects your playbook steps.
+  </Card>
+</CardGroup>

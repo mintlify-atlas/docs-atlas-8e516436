@@ -1,28 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "Xsoar",
+  "projectType": "framework",
+  "projectName": "Cortex XSOAR Content",
+  "projectDescription": "An open-source content repository for Cortex XSOAR (formerly Demisto) that provides 1,300+ Packs containing Integrations, Playbooks, Scripts, and other automation content for Security Operations orchestration.",
   "theme": "maple",
-  "colors": {
-    "primary": "#00cc66",
-    "light": "#241c23",
-    "dark": "#828282"
-  },
-  "favicon": "https://media.brand.dev/8e73f73c-cefd-4b6f-988e-aa88c1929285.png",
-  "logo": {
-    "light": "https://media.brand.dev/8ed90148-b934-4cfa-b163-cb88a8cff649.svg",
-    "dark": "https://media.brand.dev/8ed90148-b934-4cfa-b163-cb88a8cff649.svg"
-  },
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/demisto/content"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/demisto/content"
-    }
-  },
+  "primaryColor": "#00cc66",
+  "lightColor": "#241c23",
+  "darkColor": "#828282",
   "navigation": {
     "tabs": [
       {
@@ -97,5 +80,38 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "1,300+ content packs covering security integrations, playbooks, and scripts",
+    "Python and JavaScript integration framework with BaseClient HTTP abstraction",
+    "Visual playbook engine (COPS format) for SOC automation",
+    "CommandResults / return_results() pattern for structured output and context",
+    "DBotScore standard for threat intelligence indicator scoring",
+    "Incident fetching and mirroring between XSOAR and third-party platforms",
+    "Docker-based isolated execution environment for integrations and scripts",
+    "demisto-sdk CLI for linting, formatting, validation, and testing",
+    "Supports xsoar, xsiam, xpanse, and platform marketplaces",
+    "CommonServerPython runtime library injected into every integration"
+  ],
+  "publicApiSurface": [
+    "BaseClient._http_request(method, url_suffix, ...)",
+    "CommandResults(outputs_prefix, outputs, readable_output, ...)",
+    "return_results(CommandResults)",
+    "return_error(message)",
+    "demisto.command()",
+    "demisto.args()",
+    "demisto.params()",
+    "demisto.debug() / demisto.info()",
+    "tableToMarkdown(name, t, headers, ...)",
+    "DBotScoreType / DBotScoreReliability",
+    "FeedIndicatorType",
+    "IndicatorsTimeline",
+    "EntityRelationship",
+    "ScheduledCommand",
+    "auto_detect_indicator_type(indicator_value)",
+    "handle_proxy() / skip_cert_verification()",
+    "demisto-sdk pre-commit -i <path>",
+    "demisto-sdk validate -i <path>",
+    "demisto-sdk format -i <path>"
+  ]
 }

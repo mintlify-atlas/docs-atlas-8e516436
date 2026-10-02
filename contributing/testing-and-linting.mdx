@@ -1,0 +1,236 @@
+---
+title: "Testing and Linting Cortex XSOAR Content with demisto-sdk"
+sidebarTitle: "Testing & Linting"
+description: "The demisto-sdk CLI provides pre-commit hooks, linting, formatting, and validation commands that run in Docker to ensure content quality before submission."
+---
+
+Quality in the Cortex XSOAR content repository is enforced through the `demisto-sdk` CLI — a purpose-built toolchain that understands XSOAR Pack structure, runs checks inside the same Docker images that the platform uses at runtime, and catches issues that standard Python tooling cannot see. Every PR goes through this pipeline in CircleCI, so running it locally before pushing is the fastest path to a clean review.
+
+## Installing demisto-sdk
+
+Install the SDK with pip. The version pinned in `pyproject.toml` for CI is used by GitHub Actions; for local development any recent version works:
+
+```bash
+pip install demisto-sdk
+```
+
+For a full development setup with all testing dependencies (including `pytest`, `requests-mock`, `pytest-mock`, `freezegun`, and `dateparser`), use Poetry from the repo root:
+
+```bash
+poetry install --with dev
+```
+
+## The Three Core Commands
+
+<Note>
+  Standard `pytest` often fails without the XSOAR runtime context. Always use `demisto-sdk pre-commit -i <path>` which sets up the correct Docker environment, injects `CommonServerPython`, and provides `demistomock` — exactly as the platform does at runtime.
+</Note>
+
+<CodeGroup>
+
+```bash pre-commit (lint + test + validate)
+# Run lint, unit tests, and type checking for a single Pack or path
+demisto-sdk pre-commit -i Packs/MyPack/Integrations/MyIntegration/
+
+# Run pre-commit hooks on all files in the repository
+demisto-sdk pre-commit -a
+```
+
+```bash format (auto-fix)
+# Auto-fix YAML structure, JSON formatting, and Python style issues
+demisto-sdk format -i Packs/MyPack/Integrations/MyIntegration/MyIntegration.py
+
+# Format an entire Pack at once
+demisto-sdk format -i Packs/MyPack/
+```
+
+```bash validate (schema & metadata)
+# Validate content against XSOAR schema rules and Pack metadata requirements
+demisto-sdk validate -i Packs/MyPack/Integrations/MyIntegration/
+
+# Validate is also run automatically as part of pre-commit
+demisto-sdk validate -i Packs/MyPack/
+```
+
+</CodeGroup>
+
+### Command Reference
+
+| Command | Purpose | When to Run |
+|---|---|---|
+| `demisto-sdk pre-commit -i <path>` | Runs lint, unit tests, and type checking in Docker | Before every commit and push |
+| `demisto-sdk pre-commit -a` | Same as above but across all files | Before opening a PR from a large branch |
+| `demisto-sdk format -i <path>` | Auto-fixes YAML, JSON, and Python style | After writing new code or editing YAML |
+| `demisto-sdk validate -i <path>` | Validates against XSOAR schema rules | After format, to catch structural issues |
+
+## Pre-Commit Hooks
+
+The repository ships a `.pre-commit-config_template.yaml` that defines the full set of hooks the CI pipeline applies. Key hooks include:
+
+- **`check-json` / `check-yaml` / `check-ast`** — basic syntax validation for all config and code files.
+- **`check-merge-conflict`** — blocks commits with unresolved merge conflict markers.
+- **`name-tests-test`** — enforces that test files match the pattern `*_test.py`.
+- **`check-added-large-files`** — rejects files larger than 5 120 KB (excluding integration READMEs).
+- **`pycln`** — removes unused imports from Python files.
+- **`ruff-format` + `ruff`** — fast Python formatter and linter (see [Linting with ruff](#linting-with-ruff) below).
+- **`mypy-in-docker`** — runs `mypy` type checking inside the integration's Docker image.
+- **`pylint-in-docker`** — runs `pylint -E` (errors only) inside Docker.
+- **`xsoar-lint`** — XSOAR-specific linting rules via `demisto-sdk xsoar-lint`.
+- **`mdx-validation`** — validates `README.md` files with the MDX parser used by the docs site.
+
+## Linting with ruff
+
+`ruff` is the primary Python linter and formatter for the content repository. It is configured in `pyproject.toml` under `[tool.ruff]` with:
+
+- **Line length**: 130 characters
+- **Target Python version**: 3.11
+- **Auto-fix enabled**: `fix = true`
+- **Excluded paths**: `CommonServerPython`, `test_data`, `conftest.py`, `demistomock.py`
+
+A stricter `nightly_ruff.toml` configuration is applied during nightly CI runs and on CI branches. The pre-commit hook passes `--config=nightly_ruff.toml` in those contexts.
+
+Run ruff manually to see lint errors without the full pre-commit suite:
+
+```bash
+# Check and auto-fix
+ruff check --fix Packs/MyPack/Integrations/MyIntegration/MyIntegration.py
+
+# Format only
+ruff format Packs/MyPack/Integrations/MyIntegration/MyIntegration.py
+```
+
+## Type Checking with mypy
+
+`mypy` is enforced for all integration and script Python files. Always use type hints — unannotated functions will produce `mypy` errors in CI.
+
+The pre-commit hook runs `mypy` with:
+- `--ignore-missing-imports`
+- `--check-untyped-defs`
+- `--show-error-codes`
+- `--allow-redefinition`
+
+Test files (`*_test.py`), `conftest.py`, and `demistomock.py` are excluded from `mypy` checks.
+
+```python
+# Good — fully annotated function
+def get_incidents(client: Client, limit: int) -> list[dict]:
+    return client.fetch_incidents(max_results=limit)
+
+# Bad — missing type hints, will fail mypy in CI
+def get_incidents(client, limit):
+    return client.fetch_incidents(max_results=limit)
+```
+
+## Writing Unit Tests
+
+Unit tests live in a file named `<IntegrationName>_test.py` (or `<ScriptName>_test.py`) alongside the implementation file. This naming convention is enforced by the `name-tests-test` pre-commit hook.
+
+### Required Imports
+
+Every test file must import `demistomock` and patch XSOAR's runtime context:
+
+```python
+import demistomock as demisto
+import pytest
+```
+
+### Mocking XSOAR Context
+
+Use `mocker.patch` (from `pytest-mock`) to mock `demisto.params()` and `demisto.args()`:
+
+```python
+def test_fetch_incidents_command(mocker):
+    mocker.patch.object(demisto, "params", return_value={
+        "url": "https://api.example.com",
+        "apikey": "test-api-key",
+        "insecure": False,
+    })
+    mocker.patch.object(demisto, "args", return_value={
+        "limit": "10",
+    })
+    # ... rest of test
+```
+
+### Mocking HTTP Calls
+
+Use `requests_mock` to intercept outbound HTTP requests without making real network calls:
+
+```python
+import requests_mock as requests_mock_module
+
+def test_get_alert(requests_mock):
+    requests_mock.get(
+        "https://api.example.com/alerts/1",
+        json={"id": "1", "severity": "high", "name": "Test Alert"},
+    )
+    client = Client(base_url="https://api.example.com", api_key="test-key")
+    result = client.get_alert("1")
+    assert result["severity"] == "high"
+```
+
+### Minimal Test File Example
+
+The following is a complete, minimal test file for a hypothetical integration. It demonstrates the standard imports, mock patterns, and assertion style expected by the CI pipeline:
+
+```python
+import demistomock as demisto
+import pytest
+from pytest_mock import MockerFixture
+import requests_mock as requests_mock_lib
+
+from MyIntegration import Client, get_alert_command
+
+
+BASE_URL = "https://api.example.com"
+API_KEY = "test-api-key-12345"
+
+
+@pytest.fixture
+def client() -> Client:
+    """Return a Client instance configured for testing."""
+    return Client(base_url=BASE_URL, api_key=API_KEY, verify=False)
+
+
+def test_get_alert_command(client: Client, requests_mock: requests_mock_lib.Mocker) -> None:
+    """Test that get_alert_command returns a CommandResults with the correct outputs."""
+    requests_mock.get(
+        f"{BASE_URL}/alerts/42",
+        json={"id": "42", "severity": "critical", "name": "Suspicious Login"},
+    )
+
+    result = get_alert_command(client, args={"alert_id": "42"})
+
+    assert result.outputs_prefix == "MyIntegration.Alert"
+    assert result.outputs["id"] == "42"
+    assert result.outputs["severity"] == "critical"
+
+
+def test_get_alert_command_not_found(
+    client: Client, requests_mock: requests_mock_lib.Mocker
+) -> None:
+    """Test that a 404 response raises a DemistoException."""
+    from CommonServerPython import DemistoException
+
+    requests_mock.get(f"{BASE_URL}/alerts/999", status_code=404)
+
+    with pytest.raises(DemistoException, match="404"):
+        get_alert_command(client, args={"alert_id": "999"})
+```
+
+## Dev Dependencies Reference
+
+The following packages are defined in the `[tool.poetry.group.dev.dependencies]` section of `pyproject.toml`:
+
+| Package | Version | Purpose |
+|---|---|---|
+| `demisto-sdk` | `1.39.10` | Primary CLI for lint, test, validate, format |
+| `pytest` | `>=7.1.2` | Test framework |
+| `requests-mock` | `>=1.9.3` | Mock HTTP requests in tests |
+| `pytest-mock` | `>=3.7.0` | `mocker` fixture for patching |
+| `freezegun` | `>=1.1.0` | Freeze time in datetime-sensitive tests |
+| `dateparser` | `>=1.2.0` | Date parsing utilities used by many integrations |
+| `ruff` | `*` | Linter and formatter (version pinned in pre-commit config) |
+
+<Tip>
+  The `demisto-sdk` version listed in `pyproject.toml` controls the version used by GitHub Actions CI. To control the version for local development or in other environments, modify your local `pip install demisto-sdk==<version>` or the infra repo's `pyproject.toml` as appropriate.
+</Tip>

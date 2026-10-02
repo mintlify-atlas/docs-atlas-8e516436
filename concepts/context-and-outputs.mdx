@@ -1,0 +1,288 @@
+---
+title: "Incident Context and Outputs: How XSOAR Stores Automation Data"
+sidebarTitle: "Context & Outputs"
+description: "The XSOAR incident context is a key-value store shared by all playbook tasks. Integrations write to it via CommandResults and playbooks read from it using dot-notation paths."
+---
+
+Every Cortex XSOAR incident carries a hierarchical JSON store called the **incident context**. When a playbook task runs an integration command, the returned data is written into this store. Subsequent tasks — whether they run scripts, integrations, or conditional branches — can read any value previously written by any other task, making the context the universal communication layer for playbook automation.
+
+## The Incident Context
+
+The context is a nested key-value structure that lives for the entire lifetime of an incident. Think of it as a shared Python dictionary attached to the incident object: all tasks read and write to the same store, and values from one task are immediately available to the next.
+
+```json
+{
+  "CortexXDR": {
+    "Incident": [
+      {
+        "id": "12345",
+        "status": "new",
+        "severity": "high"
+      }
+    ]
+  },
+  "IP": [
+    {
+      "Address": "1.2.3.4",
+      "Geo": { "Country": "US" }
+    }
+  ]
+}
+```
+
+## Context Paths and Dot-Notation
+
+Every value in the context is addressed by a **dot-notation path** that mirrors the JSON structure. Playbook task inputs, conditional expressions, and `Set` task outputs all use these paths.
+
+| Path | What it references |
+|---|---|
+| `CortexXDR.Incident.id` | The `id` field of every incident under `CortexXDR.Incident` |
+| `IP.Address` | The `Address` field of every IP object |
+| `File.SHA256` | The SHA-256 hash of every file object |
+| `DBotScore.Score` | The numeric reputation score |
+
+### DT (Demisto Transform) Expressions
+
+When a context key holds a **list**, you can filter it using DT expressions wrapped in `{}`. These are evaluated against each list element, and only elements where the condition is truthy are returned.
+
+<Accordion title="DT Language Basics">
+DT expressions use the syntax `${Path.To.List.{val.fieldName == 'target'}.nestedField}`.
+
+**Filter a list by field value:**
+```
+${CortexXDR.Incident.{val.status == 'new'}.id}
+```
+Returns the `id` of all incidents whose `status` equals `"new"`.
+
+**Access the first element:**
+```
+${CortexXDR.Incident.[0].id}
+```
+
+**Compare a nested field:**
+```
+${IP.{val.Address == inputs.IPAddress}.Geo.Country}
+```
+Returns the `Geo.Country` of whichever IP object's `Address` matches the task input `IPAddress`.
+
+**Use `val` as the current element:** `val` is always a reference to the current list element being evaluated. `obj` refers to the incoming value being merged for deduplication.
+</Accordion>
+
+## Writing to Context with `CommandResults`
+
+Integration commands use the `CommandResults` class from `CommonServerPython` to return data to the war room and write it into the incident context.
+
+```python
+from CommonServerPython import *
+
+def get_incident_command(client: Client, args: dict) -> CommandResults:
+    incident_id = args.get('incident_id')
+    raw = client.get_incident(incident_id)
+
+    return CommandResults(
+        outputs_prefix='CortexXDR.Incident',
+        outputs_key_field='id',
+        outputs=raw,
+        readable_output=tableToMarkdown('CortexXDR Incident', raw, removeNull=True),
+        raw_response=raw,
+    )
+```
+
+### `outputs_prefix`
+
+`outputs_prefix` sets the **context path** under which the data is stored. The value should always follow the `Vendor.ResourceType` convention (e.g., `CortexXDR.Incident`, `VirusTotal.IP`). XSOAR will create — or merge into — a key at this path.
+
+### `outputs_key_field`
+
+`outputs_key_field` names the field (or list of fields) that uniquely identifies each record. When XSOAR writes new data into the context:
+
+- If an existing object at that path has the same `outputs_key_field` value, the object is **updated in place** rather than appended as a duplicate.
+- If no matching object is found, the new object is appended.
+
+```python
+# Single key field
+CommandResults(
+    outputs_prefix='MyVendor.Alert',
+    outputs_key_field='alert_id',   # deduplicate on alert_id
+    outputs=alert_data,
+)
+
+# Composite key (list of fields)
+CommandResults(
+    outputs_prefix='MyVendor.Event',
+    outputs_key_field=['event_id', 'source'],  # both fields must match
+    outputs=event_data,
+)
+```
+
+<Note>
+Context data persists for the lifetime of the incident. Use `outputs_key_field` to avoid duplicate entries when the same command runs multiple times.
+</Note>
+
+## Context Naming Standards
+
+Context paths must follow the `Vendor.ResourceType` convention. The vendor segment is typically your integration name (or the upstream vendor's name), and the resource type is the object being returned.
+
+```
+VirusTotal.IP          # IP enrichment from VirusTotal
+CortexXDR.Incident     # Incidents from Cortex XDR
+Splunk.Result          # Search results from Splunk
+AWS.EC2.Instance       # EC2 instances from AWS (nested vendor path is allowed)
+```
+
+## Standard Output Paths for Common Indicator Types
+
+XSOAR defines **standard paths** for common security indicators. Writing to these paths enables the platform's indicator enrichment and correlation features.
+
+| Indicator | Standard path | Key field |
+|---|---|---|
+| IP address | `IP.Address` | `Address` |
+| Domain | `Domain.Name` | `Name` |
+| URL | `URL.Data` | `Data` |
+| File MD5 | `File.MD5` | `MD5` |
+| File SHA-256 | `File.SHA256` | `SHA256` |
+| CVE | `CVE.ID` | `ID` |
+| User account | `Account.Username` | `Username` |
+| Email | `Email.To` | — |
+
+Use the `Common.*` indicator classes in `CommonServerPython` to write to these paths correctly — they handle context path generation automatically.
+
+## `tableToMarkdown`: Human-Readable Output
+
+The `tableToMarkdown` function converts a Python dictionary or list of dictionaries into a Markdown table suitable for the `readable_output` field of `CommandResults`.
+
+```python
+def tableToMarkdown(
+    name,                       # Table header string
+    t,                          # dict or list[dict] of data
+    headers=None,               # list of column names to include (ordered)
+    headerTransform=None,       # function to reformat header names
+    removeNull=False,           # omit columns where all values are None/empty
+    metadata=None,              # string printed above the table
+    url_keys=None,              # list of keys to render as clickable links
+    date_fields=None,           # list of date fields to format as human-readable
+    json_transform_mapping=None,
+    is_auto_json_transform=False,
+    sort_headers=True,
+):
+    ...
+```
+
+Example usage:
+
+```python
+incidents = [
+    {'id': '001', 'severity': 'high',   'status': 'new'},
+    {'id': '002', 'severity': 'medium', 'status': 'resolved'},
+]
+
+readable = tableToMarkdown(
+    name='CortexXDR Incidents',
+    t=incidents,
+    headers=['id', 'severity', 'status'],
+    removeNull=True,
+)
+```
+
+Produces:
+
+```
+### CortexXDR Incidents
+| id  | severity | status   |
+|-----|----------|----------|
+| 001 | high     | new      |
+| 002 | medium   | resolved |
+```
+
+## Complete End-to-End Example
+
+The following shows a full integration pattern: a `Client` method that calls the external API, a command function that wraps it, and `CommandResults` with correct context paths.
+
+<CodeGroup>
+
+```python Integration command (complete)
+import demistomock as demisto
+from CommonServerPython import *
+
+
+class Client(BaseClient):
+    """Thin wrapper around the vendor REST API."""
+
+    def get_alert(self, alert_id: str) -> dict:
+        return self._http_request(
+            method='GET',
+            url_suffix=f'/alerts/{alert_id}',
+        )
+
+
+def get_alert_command(client: Client, args: dict) -> CommandResults:
+    alert_id = args.get('alert_id', '')
+    if not alert_id:
+        raise ValueError('alert_id is required')
+
+    raw_alert = client.get_alert(alert_id)
+
+    # Normalise keys to CamelCase for context
+    alert_context = {
+        'ID':       raw_alert.get('id'),
+        'Name':     raw_alert.get('name'),
+        'Severity': raw_alert.get('severity'),
+        'Status':   raw_alert.get('status'),
+        'Created':  raw_alert.get('created_at'),
+    }
+
+    readable = tableToMarkdown(
+        name=f'Alert {alert_id}',
+        t=alert_context,
+        headers=['ID', 'Name', 'Severity', 'Status', 'Created'],
+        removeNull=True,
+    )
+
+    return CommandResults(
+        outputs_prefix='MyVendor.Alert',  # → context path MyVendor.Alert
+        outputs_key_field='ID',           # deduplicate on the ID field
+        outputs=alert_context,
+        readable_output=readable,
+        raw_response=raw_alert,           # original API response, unmodified
+    )
+
+
+def main():
+    params = demisto.params()
+    args   = demisto.args()
+    command = demisto.command()
+
+    client = Client(
+        base_url=params.get('url'),
+        verify=not params.get('insecure', False),
+        headers={'Authorization': f"Bearer {params.get('api_key')}"},
+    )
+
+    if command == 'myvendor-get-alert':
+        return_results(get_alert_command(client, args))
+
+
+if __name__ in ('__main__', '__builtin__', 'builtins'):
+    main()
+```
+
+```yaml Integration YAML (outputs section)
+outputs:
+  - contextPath: MyVendor.Alert.ID
+    description: The unique alert identifier.
+    type: String
+  - contextPath: MyVendor.Alert.Name
+    description: Human-readable alert name.
+    type: String
+  - contextPath: MyVendor.Alert.Severity
+    description: "Alert severity: low / medium / high / critical."
+    type: String
+  - contextPath: MyVendor.Alert.Status
+    description: "Current status: new / in_progress / resolved."
+    type: String
+  - contextPath: MyVendor.Alert.Created
+    description: ISO 8601 timestamp when the alert was created.
+    type: Date
+```
+
+</CodeGroup>

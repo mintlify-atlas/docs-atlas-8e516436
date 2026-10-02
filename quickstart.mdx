@@ -1,47 +1,212 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with Cortex XSOAR Content Development"
+sidebarTitle: "Quickstart"
+description: "Set up your development environment, install demisto-sdk, and write your first Cortex XSOAR Integration in under 30 minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+This guide walks you through every step needed to go from a clean machine to a running Cortex XSOAR integration — installing tools, cloning the repository, scaffolding a new Pack, and executing the SDK validation pipeline. By the end you will have a working integration skeleton that passes all pre-commit checks.
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+<Tip>
+  The repository ships with a fully configured VS Code devcontainer. If you have VS Code and Docker installed, click **Open in Remote-Containers** from the [repository README](https://github.com/demisto/content) to get a pre-configured environment with all recommended extensions and settings — no manual setup required.
+</Tip>
 
 ## Prerequisites
 
-Before you begin, you must have:
+Before you begin, make sure the following are installed and available on your `PATH`:
 
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
+- **Python 3.10 or later** — the demisto-sdk and all integration code targets Python 3.10+.
+- **Docker** — required for running `demisto-sdk pre-commit`. All lint, test, and validation steps execute inside Docker to match the platform runtime exactly. Standard `pytest` will fail without Docker because the runtime context (`demistomock`, `CommonServerPython`) is injected by the container.
+- **Git** — for cloning the repository and submitting pull requests.
+- **VS Code or PyCharm** — both are well supported; VS Code with the Remote-Containers extension is recommended because of the devcontainer configuration included in the repository.
 
-## Get started
+## Setup Steps
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  ### Install demisto-sdk
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+  Install the SDK globally (or into a virtual environment) using pip:
 
-    ```bash
-    your-cli init
+  <CodeGroup>
+    ```bash pip install
+    pip install demisto-sdk
     ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
 
-    ```bash
-    your-cli start
+    ```bash verify installation
+    demisto-sdk --version
     ```
-  </Step>
+  </CodeGroup>
+
+  ### Clone the Repository
+
+  Clone the content repository and open it in VS Code. The `--depth 1` flag keeps the initial clone fast; omit it if you need full history.
+
+  ```bash
+  git clone --depth 1 https://github.com/demisto/content.git
+  cd content
+  code .
+  ```
+
+  When VS Code opens it will detect the `.devcontainer/devcontainer.json` configuration and prompt you to **Reopen in Container**. Accepting this recommendation spins up a Docker-based development environment with Python, demisto-sdk, and all recommended VS Code extensions pre-installed.
+
+  ### Copy an Integration Template
+
+  The `Templates/Integrations/` directory contains category-specific starter templates (for example, `AnalyticsAndSIEM`, `Authentication`, `CaseManagement`, `DataEnrichmentThreatIntelligence`). Copy the template that best matches your integration's category into the correct Pack location:
+
+  ```bash
+  # Create a new Pack directory and copy a template
+  mkdir -p Packs/MyPack/Integrations/MyIntegration
+  cp -r Templates/Integrations/DataEnrichmentThreatIntelligence/* \
+        Packs/MyPack/Integrations/MyIntegration/
+  ```
+
+  Rename the copied files to match your integration name — the `.py`, `.yml`, `_test.py`, and `README.md` files must all share the same `<IntegrationName>` prefix.
+
+  ### Write Your Integration Code
+
+  Open the `.py` file and implement your integration. Every integration file must follow the structure shown below — `demistomock` and `CommonServerPython` are injected at runtime by the platform, so they must be imported but will not be present in your local file system.
+
+  <CodeGroup>
+    ```python MyIntegration.py
+    import demistomock as demisto          # injected at runtime
+    from CommonServerPython import *       # injected at runtime — provides BaseClient,
+                                           # CommandResults, return_results, etc.
+
+
+    class Client(BaseClient):
+        """Wraps all HTTP calls to the upstream API."""
+
+        def get_alert(self, alert_id: str) -> dict:
+            return self._http_request(
+                method="GET",
+                url_suffix=f"/alerts/{alert_id}",
+            )
+
+
+    def get_alert_command(client: Client, args: dict) -> CommandResults:
+        alert_id = args.get("alert_id", "")
+        raw = client.get_alert(alert_id)
+
+        return CommandResults(
+            outputs_prefix="MyIntegration.Alert",
+            outputs_key_field="id",
+            outputs=raw,
+            readable_output=tableToMarkdown("Alert Details", raw),
+        )
+
+
+    def main() -> None:
+        params = demisto.params()
+        args = demisto.args()
+        command = demisto.command()
+
+        client = Client(
+            base_url=params.get("url", ""),
+            verify=not params.get("insecure", False),
+            proxy=params.get("proxy", False),
+            headers={"Authorization": f"Bearer {params.get('api_key')}"},
+        )
+
+        try:
+            if command == "test-module":
+                return_results("ok")
+            elif command == "myintegration-get-alert":
+                return_results(get_alert_command(client, args))
+            else:
+                raise NotImplementedError(f"Command {command!r} is not implemented.")
+        except Exception as e:
+            return_error(f"Failed to execute {command}. Error: {e}")
+
+
+    if __name__ in ("__main__", "__builtin__", "builtins"):
+        main()
+    ```
+
+    ```yaml MyIntegration.yml (excerpt)
+    name: MyIntegration
+    display: My Integration
+    category: Data Enrichment & Threat Intelligence
+    description: Example integration skeleton.
+    configuration:
+      - name: url
+        display: Server URL
+        required: true
+        type: 0
+      - name: api_key
+        display: API Key
+        required: true
+        type: 4   # encrypted
+      - name: insecure
+        display: Trust any certificate (not secure)
+        type: 8
+        required: false
+      - name: proxy
+        display: Use system proxy settings
+        type: 8
+        required: false
+    script:
+      script: ''
+      type: python
+      subtype: python3
+      dockerimage: demisto/python3:3.10.14.100706
+      commands:
+        - name: myintegration-get-alert
+          description: Retrieve a single alert by ID.
+          arguments:
+            - name: alert_id
+              required: true
+              description: The unique identifier of the alert to retrieve.
+          outputs:
+            - contextPath: MyIntegration.Alert.id
+              description: Alert identifier.
+              type: String
+    ```
+  </CodeGroup>
+
+  ### Run the SDK Validation Pipeline
+
+  Before submitting a pull request, run all three SDK commands against your integration. They must all pass cleanly.
+
+  ```bash
+  # 1. Auto-fix style issues, YAML structure, and JSON formatting
+  demisto-sdk format -i Packs/MyPack/Integrations/MyIntegration/
+
+  # 2. Validate content against XSOAR standards
+  demisto-sdk validate -i Packs/MyPack/Integrations/MyIntegration/
+
+  # 3. Run lint, unit tests, and all pre-commit hooks inside Docker
+  demisto-sdk pre-commit -i Packs/MyPack/Integrations/MyIntegration/
+  ```
+
+  The `pre-commit` step is the most comprehensive — it runs inside the same Docker image specified in your `.yml` file's `dockerimage` field, which guarantees that the environment matches what the XSOAR platform will use when executing your code. Always run this before opening a pull request.
+
+  ### Add a Pack Metadata File and Release Notes
+
+  Every Pack requires a `pack_metadata.json` at the Pack root. See the [Pack Structure](/pack-structure) guide for the full schema and a real-world example. Additionally, every change to a Pack requires a corresponding release note entry:
+
+  ```bash
+  # Create a release notes entry for version 1.0.0
+  mkdir -p Packs/MyPack/ReleaseNotes
+  echo "#### Integrations\n##### MyIntegration\n- Initial release." \
+       > Packs/MyPack/ReleaseNotes/1_0_0.md
+  ```
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Key SDK Commands Reference
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+| Command | Purpose |
+|---|---|
+| `demisto-sdk pre-commit -i <path>` | Runs lint, unit tests, and validation in Docker. Use this as your primary check. |
+| `demisto-sdk format -i <path>` | Automatically fixes Python style, YAML structure, and JSON formatting issues. |
+| `demisto-sdk validate -i <path>` | Validates content structure and metadata against XSOAR standards (also called by `pre-commit`). |
+| `demisto-sdk pre-commit -a` | Runs pre-commit hooks across all files in the repository. |
+
+## Important Patterns to Remember
+
+Content development in this repository follows several non-obvious conventions enforced by the SDK and the platform runtime:
+
+- **Always import `demistomock as demisto`** at the top of every integration and script file — it is injected at runtime but the import must be present.
+- **Always import `from CommonServerPython import *`** — this provides `BaseClient`, `CommandResults`, `return_results`, `return_error`, `tableToMarkdown`, and many other utilities. It is also injected at runtime.
+- **Use `return_error("message")`** for user-facing errors, and only raise exceptions for unexpected failures.
+- **Use `demisto.params()`** for integration configuration values and **`demisto.args()`** for command arguments. Never hard-code credentials.
+- **Dependencies are managed via Docker images** defined in the `.yml` file — do not attempt to `pip install` at runtime.
+- **Use `demisto.debug()` and `demisto.info()`** for logging. Avoid `print()`.

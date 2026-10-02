@@ -1,0 +1,323 @@
+---
+title: "BaseClient Class Reference for Cortex XSOAR HTTP Integrations"
+sidebarTitle: "BaseClient"
+description: "Full API reference for the CommonServerPython BaseClient class — constructor parameters, _http_request() method signature, and usage patterns for HTTP-based integrations."
+---
+
+`BaseClient` is the standard HTTP client base class provided by CommonServerPython. Every HTTP-based XSOAR integration should subclass `BaseClient` rather than making raw `requests` calls. The class manages SSL verification, proxy routing, automatic retries with exponential backoff, execution metrics collection, and time-sensitive command deadlines transparently.
+
+The class is defined at runtime inside CommonServerPython and is available after `from CommonServerPython import *`.
+
+---
+
+## Class Definition
+
+```python
+class BaseClient(object):
+    REQUESTS_TIMEOUT = 60
+    TIME_SENSITIVE_TOTAL_TIMEOUT = 15
+```
+
+### Class Constants
+
+| Constant | Value | Description |
+|---|---|---|
+| `REQUESTS_TIMEOUT` | `60` | Default HTTP timeout in seconds used when no timeout is specified. |
+| `TIME_SENSITIVE_TOTAL_TIMEOUT` | `15` | Total timeout budget (seconds) for time-sensitive command execution mode. |
+
+---
+
+## Constructor
+
+```python
+def __init__(
+    self,
+    base_url,
+    verify=True,
+    proxy=False,
+    ok_codes=tuple(),
+    headers=None,
+    auth=None,
+    timeout=REQUESTS_TIMEOUT,
+)
+```
+
+<ParamField path="base_url" type="str" required>
+  Base server address with suffix, for example `https://api.example.com/v2/`. All `url_suffix` values passed to `_http_request` are appended to this URL using `urljoin`.
+</ParamField>
+
+<ParamField path="verify" type="bool" default="True">
+  Whether the request should verify the SSL certificate of the remote server. Pass `False` to disable SSL verification (equivalent to `--insecure`). The constructor automatically calls `skip_cert_verification()` when `False`.
+</ParamField>
+
+<ParamField path="proxy" type="bool" default="False">
+  Whether to route requests through the system proxy. When `False`, the constructor calls `skip_proxy()` to clear proxy environment variables. When `True`, it calls `ensure_proxy_has_http_prefix()` to normalise the proxy URL.
+</ParamField>
+
+<ParamField path="ok_codes" type="tuple" default="tuple()">
+  HTTP status codes to treat as successful responses, for example `(200, 201, 204)`. When empty, `requests.Response.ok` (status < 400) is used as the success criterion. Can be overridden per-call in `_http_request`.
+</ParamField>
+
+<ParamField path="headers" type="dict or None" default="None">
+  Default request headers applied to every request, for example `{'Accept': 'application/json', 'X-API-Version': '2'}`. Can be overridden per-call in `_http_request`.
+</ParamField>
+
+<ParamField path="auth" type="dict or tuple or None" default="None">
+  Default request authorization. Typically a `(username, password)` tuple for HTTP Basic Auth. Can be overridden per-call in `_http_request`.
+</ParamField>
+
+<ParamField path="timeout" type="float" default="60">
+  Default timeout in seconds. Can be overridden by the `REQUESTS_TIMEOUT.<integration_name>` or `REQUESTS_TIMEOUT` environment variables set by the XSOAR platform, or per-call in `_http_request`.
+</ParamField>
+
+---
+
+## `_http_request` Method
+
+```python
+def _http_request(
+    self,
+    method,
+    url_suffix='',
+    full_url=None,
+    headers=None,
+    auth=None,
+    json_data=None,
+    params=None,
+    data=None,
+    files=None,
+    timeout=None,
+    resp_type='json',
+    ok_codes=None,
+    return_empty_response=False,
+    retries=0,
+    status_list_to_retry=None,
+    backoff_factor=5,
+    backoff_jitter=0.0,
+    raise_on_redirect=False,
+    raise_on_status=False,
+    error_handler=None,
+    empty_valid_codes=None,
+    params_parser=None,
+    with_metrics=False,
+    **kwargs,
+)
+```
+
+A wrapper around the `requests` library that handles response parsing, error detection, retry logic, and execution metrics.
+
+<ParamField path="method" type="str" required>
+  The HTTP method: `'GET'`, `'POST'`, `'PUT'`, `'PATCH'`, `'DELETE'`, etc.
+</ParamField>
+
+<ParamField path="url_suffix" type="str" default="''">
+  The API endpoint path appended to `self._base_url`, for example `'/incidents/list'`. Ignored when `full_url` is provided.
+</ParamField>
+
+<ParamField path="full_url" type="str">
+  Bypasses `self._base_url + url_suffix` entirely. Use when making a request to an address outside the integration's base URL (e.g., a signed download URL).
+</ParamField>
+
+<ParamField path="headers" type="dict">
+  Per-request headers. When `None`, falls back to `self._headers` set in the constructor.
+</ParamField>
+
+<ParamField path="auth" type="tuple">
+  Per-request authorization tuple (usually `(username, password)`). When `None`, falls back to `self._auth`.
+</ParamField>
+
+<ParamField path="json_data" type="dict">
+  Dictionary to serialize as the JSON request body. Sets `Content-Type: application/json` automatically.
+</ParamField>
+
+<ParamField path="params" type="dict">
+  URL query string parameters, for example `{'limit': 100, 'offset': 0}`.
+</ParamField>
+
+<ParamField path="data" type="dict or str or bytes">
+  Raw body data for a `POST` or `PUT` request (form-encoded or raw bytes).
+</ParamField>
+
+<ParamField path="files" type="dict">
+  File data for a multipart `POST` request, using the `requests` files format.
+</ParamField>
+
+<ParamField path="timeout" type="float or tuple">
+  Per-request timeout in seconds. Can be a single float (connection timeout) or a `(connect, read)` tuple. When `None`, uses `self.timeout`. In time-sensitive mode, automatically set to the remaining deadline.
+</ParamField>
+
+<ParamField path="resp_type" type="str" default="'json'">
+  Controls the return type. Accepted values:
+  - `'json'` — parses the response body as JSON and returns a `dict` or `list`.
+  - `'text'` — returns the response body as a `str`.
+  - `'content'` — returns the response body as raw `bytes`.
+  - `'xml'` — parses the response body as XML and returns an `xml.etree.ElementTree.Element`.
+  - `'response'` — returns the raw `requests.Response` object.
+</ParamField>
+
+<ParamField path="ok_codes" type="tuple">
+  Per-request override for acceptable HTTP status codes. When `None`, uses `self._ok_codes`.
+</ParamField>
+
+<ParamField path="return_empty_response" type="bool" default="False">
+  When `True`, returns `None` for responses with no body (instead of raising an error). Useful for `DELETE` endpoints that return `204 No Content`.
+</ParamField>
+
+<ParamField path="retries" type="int" default="0">
+  Number of retry attempts on failure. When `0`, the request fails on the first error without retrying.
+</ParamField>
+
+<ParamField path="status_list_to_retry" type="iterable">
+  A set of integer HTTP status codes that should trigger a retry. Only applies for `GET`, `POST`, and `PUT` methods.
+</ParamField>
+
+<ParamField path="backoff_factor" type="float" default="5">
+  Multiplier for the exponential backoff delay between retries. urllib3 sleeps for `{backoff_factor} * (2 ** ({retries} - 1))` seconds between attempts. Default is `5`.
+</ParamField>
+
+<ParamField path="backoff_jitter" type="float" default="0.0">
+  Random jitter added to the backoff delay: `random.uniform(0, backoff_jitter)`.
+</ParamField>
+
+<ParamField path="raise_on_redirect" type="bool" default="False">
+  Whether to raise `MaxRetryError` when the redirect limit is exhausted, instead of returning a 3xx response.
+</ParamField>
+
+<ParamField path="raise_on_status" type="bool" default="False">
+  Whether to raise an exception when retries are exhausted and the final status code is in `status_list_to_retry`.
+</ParamField>
+
+<ParamField path="error_handler" type="callable">
+  A callable `(response) -> None` that is invoked on non-OK responses before the default `DemistoException` is raised. Use it to parse vendor-specific error bodies and raise a more descriptive exception.
+</ParamField>
+
+<ParamField path="empty_valid_codes" type="list">
+  HTTP status codes for which an empty (zero-byte) response body is valid, for example `[204, 202]`.
+</ParamField>
+
+<ParamField path="params_parser" type="callable">
+  A callable to customise URL parameter quoting. By default spaces become `+` and `/` becomes `%2F`. Supported only in Python 3.
+</ParamField>
+
+<ParamField path="with_metrics" type="bool" default="False">
+  When `True`, automatically increments `self.execution_metrics.success` or the appropriate error counter based on the response.
+</ParamField>
+
+### Return Value
+
+<ResponseField name="response" type="dict | list | str | bytes | xml.etree.ElementTree.Element | requests.Response">
+  The parsed response. The exact type depends on the `resp_type` parameter. Raises `DemistoException` on non-OK HTTP status codes.
+</ResponseField>
+
+---
+
+## DemistoException
+
+`_http_request` raises `DemistoException` when the server returns a non-OK status code and no `error_handler` is provided.
+
+```python
+class DemistoException(Exception):
+    def __init__(self, message, exception=None, res=None, error_type=None, *args)
+```
+
+| Attribute | Type | Description |
+|---|---|---|
+| `message` | `str` | Human-readable error message. |
+| `res` | `requests.Response` | The raw response object. Access `e.res.status_code`, `e.res.text`, etc. |
+| `exception` | `Exception` | The underlying exception, if any. |
+| `error_type` | `str` | Optional error type classification. |
+
+```python
+try:
+    data = self._http_request('GET', '/endpoint')
+except DemistoException as e:
+    if e.res and e.res.status_code == 404:
+        return CommandResults(readable_output="Resource not found.")
+    raise
+```
+
+---
+
+## Complete Example
+
+The following example shows a typical integration `Client` class that subclasses `BaseClient` and exposes two API methods.
+
+```python
+from CommonServerPython import *
+
+class Client(BaseClient):
+    """Client for the ExampleVendor API."""
+
+    def __init__(self, base_url: str, api_key: str, verify: bool, proxy: bool):
+        super().__init__(
+            base_url=base_url,
+            verify=verify,
+            proxy=proxy,
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Accept': 'application/json',
+            },
+            ok_codes=(200, 201),
+        )
+
+    def get_alert(self, alert_id: str) -> dict:
+        """Retrieve a single alert by ID."""
+        return self._http_request(
+            method='GET',
+            url_suffix=f'/alerts/{alert_id}',
+        )
+
+    def list_alerts(self, limit: int = 50, status: str = 'open') -> list:
+        """List alerts with optional filtering."""
+        return self._http_request(
+            method='GET',
+            url_suffix='/alerts',
+            params={'limit': limit, 'status': status},
+        )
+
+    def close_alert(self, alert_id: str, reason: str) -> None:
+        """Close an alert. Returns no body (204)."""
+        self._http_request(
+            method='POST',
+            url_suffix=f'/alerts/{alert_id}/close',
+            json_data={'reason': reason},
+            return_empty_response=True,
+            ok_codes=(204,),
+        )
+
+
+def get_alert_command(client: Client, args: dict) -> CommandResults:
+    alert_id = args.get('alert_id', '')
+    alert = client.get_alert(alert_id)
+    return CommandResults(
+        outputs_prefix='ExampleVendor.Alert',
+        outputs_key_field='id',
+        outputs=alert,
+        readable_output=tableToMarkdown('Alert Details', alert),
+    )
+
+
+def main():
+    params = demisto.params()
+    client = Client(
+        base_url=params['url'].rstrip('/'),
+        api_key=params.get('api_key', {}).get('password', ''),
+        verify=not params.get('insecure', False),
+        proxy=params.get('proxy', False),
+    )
+
+    try:
+        command = demisto.command()
+        args = demisto.args()
+        if command == 'test-module':
+            client.list_alerts(limit=1)
+            return_results('ok')
+        elif command == 'examplevendor-get-alert':
+            return_results(get_alert_command(client, args))
+    except DemistoException as e:
+        return_error(f'Failed to execute {demisto.command()}. Error: {e}')
+
+
+if __name__ in ('__main__', '__builtin__', 'builtins'):
+    main()
+```

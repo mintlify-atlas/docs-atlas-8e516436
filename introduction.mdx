@@ -1,0 +1,102 @@
+---
+title: "Cortex XSOAR Content: Security Automation Repository"
+sidebarTitle: "Introduction"
+description: "Cortex XSOAR Content is an open-source repository of 1,300+ Packs — Integrations, Playbooks, and Scripts for automating security operations on the XSOAR platform."
+---
+
+The Cortex XSOAR Content repository is an open-source collection of security automation content maintained by Palo Alto Networks and the broader security community. It exists to help Security Operations teams automate and orchestrate their workflows using the Cortex XSOAR platform — sharing playbooks, integration connectors, automation scripts, and report templates that can be adapted, extended, and contributed back by anyone. The project embodies a collaborative philosophy: security professionals building on each other's work to respond to threats faster and more consistently.
+
+<Note>
+  Demisto is now Cortex XSOAR. All content in this repository is compatible with the Cortex platform.
+</Note>
+
+## What Is in the Repository
+
+The repository is hosted at [github.com/demisto/content](https://github.com/demisto/content) and contains more than 1,300 Packs spanning every major security domain. Content is organised into four primary types.
+
+### Integrations
+
+Integrations written in Python (or JavaScript) enable the Cortex XSOAR platform to orchestrate security and IT products. Each integration exposes a set of commands, where each command typically mirrors a product API capability and returns both a human-readable and machine-readable response. Integrations run inside isolated Docker containers, keeping dependencies self-contained and executions stateless.
+
+### Playbooks
+
+Playbooks are visual, graph-based workflows built in the Cortex XSOAR playbook editor. They chain together tasks — calling integration commands, running scripts, applying conditional logic, and triggering sub-playbooks — to automate end-to-end incident response scenarios. Playbooks are stored in the open COPS format and can be exported and imported across environments.
+
+### Scripts
+
+Scripts written in Python or JavaScript perform focused Security Operations tasks inside the Cortex XSOAR platform. They can query or send commands to external products, transform data, enrich context, or drive decisions within a playbook. Like integrations, scripts run inside Docker containers.
+
+### Reports
+
+Cortex XSOAR supports flexible reports written in JSON. Standard reports that calculate incident statistics and metrics are versioned and distributed through this repository, giving teams a baseline set of dashboards and summaries from day one.
+
+## Packs: Bundling Content Together
+
+All content is distributed through **Packs**. A Pack is a directory under `Packs/<PackName>/` that groups related Integrations, Scripts, Playbooks, and supporting artifacts (incident fields, layouts, dashboards, and more) together with a `pack_metadata.json` file. The metadata file records the Pack name, author, version, categories, and which marketplaces the Pack supports. Packs are versioned independently — each change requires a corresponding entry in `ReleaseNotes/`.
+
+## Supported Marketplaces
+
+Packs declare which Cortex marketplaces they target through the `marketplaces` field in `pack_metadata.json`. The supported values seen across the repository are:
+
+| Value | Platform |
+|---|---|
+| `xsoar` | Cortex XSOAR (on-prem and cloud) |
+| `marketplacev2` | XSIAM marketplace |
+| `xpanse` | Cortex Xpanse |
+| `platform` | Unified Cortex platform |
+
+A single Pack can target multiple marketplaces simultaneously.
+
+## The demisto-sdk
+
+`demisto-sdk` is the primary command-line tool for all content development tasks. It handles linting, testing, formatting, and validation — and all checks run inside Docker to match the platform runtime exactly. The three commands you will use most often are:
+
+```bash
+# Lint, test, and validate in Docker
+demisto-sdk pre-commit -i Packs/MyPack/Integrations/MyInt/
+
+# Fix style and lint issues automatically
+demisto-sdk format -i Packs/MyPack/Integrations/MyInt/MyInt.py
+
+# Validate content against XSOAR standards
+demisto-sdk validate -i Packs/MyPack/Integrations/MyInt/
+```
+
+Install it with a single pip command:
+
+```bash
+pip install demisto-sdk
+```
+
+## Explore Further
+
+<CardGroup cols={2}>
+  <Card
+    title="Quickstart"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Set up your environment and write your first integration in under 30 minutes.
+  </Card>
+  <Card
+    title="Pack Structure"
+    icon="folder-tree"
+    href="/pack-structure"
+  >
+    Learn the required directory layout, metadata schema, and versioning rules for every Pack.
+  </Card>
+  <Card
+    title="Integrations Overview"
+    icon="plug"
+    href="/integrations/overview"
+  >
+    Deep-dive into integration architecture, BaseClient, CommandResults, and best practices.
+  </Card>
+  <Card
+    title="Contributing Guide"
+    icon="code-pull-request"
+    href="/contributing/guide"
+  >
+    Understand the pull request process and quality gates for merging content upstream.
+  </Card>
+</CardGroup>

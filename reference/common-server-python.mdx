@@ -1,0 +1,195 @@
+---
+title: "CommonServerPython API Reference for XSOAR Integrations"
+sidebarTitle: "CommonServerPython"
+description: "CommonServerPython is the runtime library injected into every XSOAR integration. It provides BaseClient, CommandResults, DBotScore types, utility functions, and the demisto module interface."
+---
+
+CommonServerPython is the shared runtime library that the Cortex XSOAR server automatically injects into every integration and script before execution. You do not need to bundle or install it — simply import its exports at the top of any integration or script file. The module lives in the content repository at `Packs/Base/Scripts/CommonServerPython/CommonServerPython.py` and is updated with each platform release.
+
+```python
+from CommonServerPython import *
+```
+
+The wildcard import is the standard convention because CommonServerPython is designed as a single flat namespace. All classes, functions, constants, and the `demisto` mock object are made available to your code immediately.
+
+---
+
+## Key Exports
+
+The following table lists the most commonly used exports, grouped by category.
+
+| Category | Exports |
+|---|---|
+| **HTTP client** | `BaseClient`, `BaseClient._http_request()` |
+| **Command output** | `CommandResults`, `return_results()`, `return_error()`, `tableToMarkdown()` |
+| **Indicator types** | `Common.IP`, `Common.URL`, `Common.Domain`, `Common.File`, `Common.CVE`, `Common.Account`, `Common.Email` |
+| **Score types** | `DBotScoreType`, `DBotScoreReliability`, `Common.DBotScore` |
+| **Feed indicators** | `FeedIndicatorType` |
+| **Enumerations** | `EntryType`, `IncidentStatus`, `IncidentSeverity`, `EntryFormat` |
+| **Utilities** | `tableToMarkdown()`, `auto_detect_indicator_type()`, `handle_proxy()`, `skip_cert_verification()`, `is_debug_mode()` |
+| **Exceptions** | `DemistoException` |
+| **Relationships** | `EntityRelationship`, `IndicatorsTimeline` |
+| **Scheduling** | `ScheduledCommand` |
+| **Metrics** | `ExecutionMetrics` |
+
+---
+
+## Enumerations
+
+### EntryType
+
+Integer constants that identify the type of a War Room entry.
+
+| Constant | Value | Description |
+|---|---|---|
+| `EntryType.NOTE` | `1` | Standard note entry (default for `CommandResults`) |
+| `EntryType.FILE` | `3` | File attachment entry |
+| `EntryType.ERROR` | `4` | Error entry |
+| `EntryType.PINNED` | `5` | Pinned entry |
+| `EntryType.IMAGE` | `7` | Image entry |
+| `EntryType.WARNING` | `11` | Warning entry |
+| `EntryType.EXECUTION_METRICS` | `19` | Execution metrics entry |
+
+### IncidentSeverity
+
+Numeric severity levels for incidents.
+
+| Constant | Value |
+|---|---|
+| `IncidentSeverity.UNKNOWN` | `0` |
+| `IncidentSeverity.INFO` | `0.5` |
+| `IncidentSeverity.LOW` | `1` |
+| `IncidentSeverity.MEDIUM` | `2` |
+| `IncidentSeverity.HIGH` | `3` |
+| `IncidentSeverity.CRITICAL` | `4` |
+
+### IncidentStatus
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `IncidentStatus.PENDING` | `0` | Incident not yet started |
+| `IncidentStatus.ACTIVE` | `1` | Incident under investigation |
+| `IncidentStatus.DONE` | `2` | Incident resolved |
+| `IncidentStatus.ARCHIVE` | `3` | Incident archived |
+
+### EntryFormat
+
+String constants for War Room entry content formats.
+
+| Constant | Value |
+|---|---|
+| `EntryFormat.HTML` | `'html'` |
+| `EntryFormat.TABLE` | `'table'` |
+| `EntryFormat.JSON` | `'json'` |
+| `EntryFormat.TEXT` | `'text'` |
+| `EntryFormat.MARKDOWN` | `'markdown'` |
+| `EntryFormat.DBOT_RESPONSE` | `'dbotCommandResponse'` |
+
+---
+
+## Utility Functions
+
+### is_debug_mode()
+
+Returns `True` when the command was invoked with the `debug-mode=true` option in the War Room.
+
+```python
+if is_debug_mode():
+    demisto.debug("Verbose diagnostic output here")
+```
+
+### auto_detect_indicator_type(indicator_value)
+
+Infers the indicator type from the value string. Requires the `tldextract` library (available in the `demisto/jmespath` Docker image and others).
+
+```python
+ioc_type = auto_detect_indicator_type("8.8.8.8")
+# returns FeedIndicatorType.IP
+```
+
+### handle_proxy(proxy_param_name='proxy', checkbox_default_value=False, handle_insecure=True, insecure_param_name=None)
+
+Reads the `proxy` integration parameter and configures environment variables accordingly. Also handles the `insecure` / `unsecure` parameter when `handle_insecure=True`. Returns a `proxies` dict suitable for passing to `requests`.
+
+```python
+proxies = handle_proxy()
+```
+
+### skip_proxy()
+
+Deletes `HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy`, and `https_proxy` environment variables so that HTTP requests bypass the system proxy.
+
+### skip_cert_verification()
+
+Deletes `REQUESTS_CA_BUNDLE` and `CURL_CA_BUNDLE` environment variables, causing `requests` to skip SSL certificate validation.
+
+### tableToMarkdown(name, t, headers=None, headerTransform=None, removeNull=False, metadata=None, url_keys=None, date_fields=None)
+
+Converts a list of dicts (or a single dict) to a Markdown table string for display in the War Room.
+
+```python
+md = tableToMarkdown("Incidents", incidents, headers=["id", "severity", "status"])
+```
+
+---
+
+## The `demisto` Module Interface
+
+The `demisto` object is the bridge between your integration code and the XSOAR platform. It is automatically available after `from CommonServerPython import *`.
+
+| Method | Description |
+|---|---|
+| `demisto.command()` | Returns the name of the currently executing command as a string, e.g. `'ip'`. |
+| `demisto.args()` | Returns a `dict` of the command arguments passed by the user. |
+| `demisto.params()` | Returns a `dict` of the integration instance configuration parameters. |
+| `demisto.incidents(list)` | Creates incidents in XSOAR. Used in `fetch-incidents` to push fetched events. |
+| `demisto.getLastRun()` | Returns the persistent state `dict` saved by the last run. |
+| `demisto.setLastRun(dict)` | Saves a `dict` as persistent state for the next scheduled run. |
+| `demisto.debug(str)` | Writes a DEBUG-level log message. Only visible when debug mode is enabled. |
+| `demisto.info(str)` | Writes an INFO-level log message to the integration log. |
+| `demisto.error(str)` | Writes an ERROR-level log message to the integration log. |
+| `demisto.executeCommand(name, args)` | Calls another integration command or automation script by name. |
+| `demisto.context()` | Returns the current incident's context data as a `dict`. |
+| `demisto.results(entry)` | Low-level method to push a War Room entry dict. Prefer `return_results()` instead. |
+
+### Usage pattern
+
+```python
+from CommonServerPython import *
+
+def main():
+    command = demisto.command()
+    args = demisto.args()
+    params = demisto.params()
+
+    try:
+        if command == 'test-module':
+            return_results('ok')
+        elif command == 'ip':
+            results = ip_command(args.get('ip'))
+            return_results(results)
+    except DemistoException as e:
+        return_error(f'Failed to execute {command}. Error: {e}')
+
+if __name__ in ('__main__', '__builtin__', 'builtins'):
+    main()
+```
+
+---
+
+## Related Reference Pages
+
+<CardGroup cols={2}>
+  <Card title="BaseClient" icon="server" href="/reference/baseclient-reference">
+    HTTP client base class with automatic retry, proxy handling, and metrics.
+  </Card>
+  <Card title="CommandResults" icon="arrow-right-from-bracket" href="/reference/command-results">
+    Standard return object for all XSOAR commands and War Room output.
+  </Card>
+  <Card title="DBotScore" icon="shield-halved" href="/reference/dbot-score-reference">
+    Indicator scoring types, reliability grades, and the DBotScore context standard.
+  </Card>
+  <Card title="Integration YAML" icon="file-code" href="/reference/integration-yaml">
+    Schema reference for integration YAML configuration files.
+  </Card>
+</CardGroup>

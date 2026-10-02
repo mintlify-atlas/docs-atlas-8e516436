@@ -1,0 +1,224 @@
+---
+title: "Docker Images in Cortex XSOAR: Managing Integration Dependencies"
+sidebarTitle: "Docker Images"
+description: "Cortex XSOAR runs every integration and script in an isolated Docker container. The Docker image is specified in the integration YAML and determines available Python packages."
+---
+
+Every integration and script in Cortex XSOAR runs inside a dedicated, isolated Docker container. This architecture means that two integrations can depend on completely different — or even conflicting — versions of the same Python package without interfering with each other. The container is spun up fresh for each command execution and torn down when the command finishes, so integrations are truly stateless and dependency-isolated by design.
+
+## Why Docker Isolation Matters
+
+In a traditional Python environment a single `pip install` updates the package globally and can break other code that depends on a different version. XSOAR avoids this entirely: each integration declares the exact Docker image it needs, and that image contains all of its dependencies pinned to specific versions. The XSOAR server never installs packages at runtime.
+
+<Warning>
+Never import packages that are not available in your specified Docker image. The integration will fail at runtime with an `ImportError`. Always verify that your `import` statements correspond to packages that are actually installed in the image you declared.
+</Warning>
+
+## Specifying the Docker Image in YAML
+
+The Docker image is set in the `script.dockerimage` field of the integration or script YAML file. This is the **only** place where dependencies are declared.
+
+```yaml
+script:
+  script: ''
+  type: python
+  subtype: python3
+  isfetch: false
+  dockerimage: demisto/python3:3.12.13.10116658   # ← full image + version tag
+```
+
+The value must be a fully qualified Docker image reference: `<organization>/<image-name>:<version-tag>`. XSOAR images are published under the `demisto/` Docker Hub organization.
+
+### Image Versioning
+
+XSOAR image tags follow the format `<major>.<minor>.<patch>.<build>`, for example `3.12.13.10116658`. Always pin to a specific version — never use `:latest` in production integrations, as it is not reproducible and the tag can be updated without warning.
+
+## Common Base Images
+
+<CardGroup cols={2}>
+  <Card title="demisto/python3" icon="python">
+    The standard base image for Python 3 integrations. Contains only the Python
+    standard library and `CommonServerPython` dependencies. Use this when your
+    integration only needs the `requests` library or stdlib modules.
+
+    ```yaml
+    dockerimage: demisto/python3:3.12.13.10116658
+    ```
+  </Card>
+  <Card title="demisto/boto3py3" icon="aws">
+    Contains `boto3` and `botocore` for integrating with AWS services. Used
+    by all AWS integrations (EC2, IAM, CloudTrail, GuardDuty, etc.).
+
+    ```yaml
+    dockerimage: demisto/boto3py3:1.0.0.12887184
+    ```
+  </Card>
+  <Card title="demisto/crypto" icon="key">
+    Includes cryptographic libraries (`pycryptodome`, `cryptography`, etc.).
+    Use for integrations that need to sign requests, decrypt payloads, or
+    perform certificate operations.
+
+    ```yaml
+    dockerimage: demisto/crypto:1.0.0.12833174
+    ```
+  </Card>
+  <Card title="demisto/pandas" icon="table">
+    Contains `pandas` and `numpy` for data analysis and CSV/Excel processing.
+    Used by reporting scripts and integrations that process tabular data.
+
+    ```yaml
+    dockerimage: demisto/pandas:1.0.0.10120494
+    ```
+  </Card>
+  <Card title="demisto/jmespath" icon="filter">
+    Includes `jmespath` and `tldextract`. Required for any integration or script
+    that uses `auto_detect_indicator_type()` from `CommonServerPython`, because
+    that function imports `tldextract` at call time.
+
+    ```yaml
+    dockerimage: demisto/jmespath:1.0.0.23980
+    ```
+  </Card>
+  <Card title="demisto/ml" icon="brain">
+    Contains machine-learning libraries (`scikit-learn`, `torch`, etc.) for
+    ML-based scripts such as phishing classifiers and clustering automations.
+
+    ```yaml
+    dockerimage: demisto/ml:1.0.0.12042988
+    ```
+  </Card>
+</CardGroup>
+
+## Finding the Right Image for Your Integration
+
+<Steps>
+
+### Search the Docker Hub catalog
+
+Go to [hub.docker.com/u/demisto](https://hub.docker.com/u/demisto) and search for the package you need. Most image names correspond directly to the main package they provide (e.g., `demisto/boto3py3` for `boto3`).
+
+### Check existing integrations for precedent
+
+Search the content repository for integrations that use the same packages you need:
+
+```bash
+grep -rn "dockerimage:" Packs/ | grep "boto3"
+```
+
+Reusing an image that is already in use elsewhere means the image is already tested and available in your XSOAR deployment.
+
+### Verify the package is installed in the image
+
+Use the Docker Hub tags page to inspect the image's `requirements.txt` or check the image directly:
+
+```bash
+docker run --rm demisto/boto3py3:1.0.0.12887184 pip list
+```
+
+### Add the image to your YAML
+
+Set the chosen image in `script.dockerimage`:
+
+```yaml
+script:
+  type: python
+  subtype: python3
+  dockerimage: demisto/boto3py3:1.0.0.12887184
+```
+
+### Validate with demisto-sdk
+
+Run `demisto-sdk pre-commit` to execute your integration's tests inside the actual Docker container. This catches `ImportError` and other dependency issues before code review.
+
+```bash
+demisto-sdk pre-commit -i Packs/MyPack/Integrations/MyIntegration/
+```
+
+</Steps>
+
+<Tip>
+Use `demisto-sdk pre-commit` which runs your tests inside the correct Docker container, catching missing dependency issues before they reach production. Running `pytest` directly on your host machine may pass even when the target Docker image is missing a package you happen to have installed locally.
+</Tip>
+
+## You Cannot `pip install` at Runtime
+
+XSOAR containers are **read-only at runtime**. There is no mechanism to install packages dynamically during a command execution. All dependencies must be baked into the Docker image declared in the YAML.
+
+```python
+# ❌ This will fail — pip is not available at runtime
+import subprocess
+subprocess.run(['pip', 'install', 'some-package'])
+
+# ✅ Correct approach: use an image that already contains some-package,
+#    or build a custom image with it pre-installed
+import some_package
+```
+
+## Creating a Custom Docker Image
+
+When no existing `demisto/` image provides the packages you need, create a custom image.
+
+<Steps>
+
+### Write a Dockerfile based on an existing XSOAR image
+
+Always base your custom image on an existing `demisto/` image to inherit the XSOAR runtime environment (`demistomock`, `CommonServerPython`, etc.).
+
+```dockerfile
+FROM demisto/python3:3.12.13.10116658
+
+# Install your additional packages
+RUN pip install --no-cache-dir \
+    my-special-package==1.2.3 \
+    another-dep==4.5.6
+```
+
+### Build and test locally
+
+```bash
+docker build -t demisto/my-custom-image:1.0.0 .
+docker run --rm demisto/my-custom-image:1.0.0 python -c "import my_special_package; print('OK')"
+```
+
+### Publish to Docker Hub
+
+Push the image to Docker Hub under the `demisto/` namespace (requires organization membership) or a namespace your XSOAR deployment is configured to pull from.
+
+```bash
+docker push demisto/my-custom-image:1.0.0.0
+```
+
+### Reference the image in your YAML
+
+```yaml
+script:
+  type: python
+  subtype: python3
+  dockerimage: demisto/my-custom-image:1.0.0.0
+```
+
+### Validate
+
+```bash
+demisto-sdk pre-commit -i Packs/MyPack/Integrations/MyIntegration/
+```
+
+</Steps>
+
+## Python Version Compatibility
+
+XSOAR supports both Python 2 and Python 3 integrations, but all new development should use **Python 3**. The Python version is determined by the Docker image, not by a separate setting. Images with `python3` in their name or base layer provide Python 3; images built on `demisto/python:2.7.*` provide Python 2.
+
+```yaml
+# Python 3 (recommended for all new integrations)
+script:
+  subtype: python3
+  dockerimage: demisto/python3:3.12.13.10116658
+
+# Python 2 (legacy only — do not use for new integrations)
+script:
+  subtype: python2
+  dockerimage: demisto/python:2.7.18.6174823
+```
+
+The `subtype` field (`python2` or `python3`) must match the Python version in the Docker image. A mismatch will cause a syntax error or unexpected behavior at runtime.

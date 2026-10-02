@@ -1,0 +1,187 @@
+---
+title: "Writing Release Notes for Cortex XSOAR Content Packs"
+sidebarTitle: "Release Notes"
+description: "Every change to a Cortex XSOAR Pack requires a release notes entry in the ReleaseNotes directory. Learn the format, versioning rules, and how the demisto-sdk generates them."
+---
+
+The Cortex XSOAR Marketplace tracks every Pack as a versioned artifact. When a user installs or upgrades a Pack, the platform surfaces the release notes to explain what changed. This means that every change to content — a new command, a fixed bug in a playbook, an updated Docker image — must be accompanied by a release notes entry that describes the change in plain language. CI validation will block any PR that modifies content without a corresponding release notes file.
+
+<Warning>
+  Opening a PR without release notes for content changes will fail CI validation. Always add release notes before submitting. The `demisto-sdk validate` command explicitly checks for missing release notes entries and will report an error for every changed Pack that lacks them.
+</Warning>
+
+## File Location and Naming
+
+Release notes files live inside the Pack directory, under a dedicated `ReleaseNotes/` sub-directory:
+
+```
+Packs/
+└── MyPack/
+    ├── pack_metadata.json
+    └── ReleaseNotes/
+        ├── 1_0_0.md     ← initial release
+        ├── 1_1_0.md     ← minor version bump
+        └── 1_1_1.md     ← patch version bump
+```
+
+The file name encodes the Pack version with underscores instead of dots: version `1.2.3` becomes `1_2_3.md`. The version in the file name must exactly match the `currentVersion` field in `pack_metadata.json`.
+
+## Versioning Rules
+
+Cortex XSOAR Packs follow [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`):
+
+| Change type | Version bump | Example |
+|---|---|---|
+| Bug fix, minor wording update, small improvement to existing content | **Patch** (`1.0.x`) | `1.0.3 → 1.0.4` |
+| New command, new Script, new Playbook, new classifier/mapper | **Minor** (`1.x.0`) | `1.0.4 → 1.1.0` |
+| Breaking change, removed command, renamed output field, significant redesign | **Major** (`x.0.0`) | `1.1.0 → 2.0.0` |
+
+When in doubt, prefer a minor bump over a patch bump — it is always safer to over-communicate the significance of a change to users who rely on the Pack in production automations.
+
+## Release Notes Format
+
+Each release notes file is a Markdown document. Use the following structure:
+
+```markdown
+#### Integrations
+
+##### MyIntegration
+- Added the **get-alert** command to retrieve a single alert by ID.
+- Fixed an issue where the **fetch-incidents** command returned duplicate incidents when the API paginated results.
+
+#### Scripts
+
+##### MyHelperScript
+- Updated the script to handle empty input lists without raising an exception.
+
+#### Playbooks
+
+##### MyResponsePlaybook
+- Added a task to send a Slack notification when an incident is escalated to P1.
+```
+
+The headings use the content entity type (`Integrations`, `Scripts`, `Playbooks`, `IncidentFields`, `Classifiers`, etc.) and the sub-headings use the entity name prefixed with `#####`. Each bullet describes one discrete change from the user's perspective.
+
+### Real Release Notes Example
+
+The following is an example of a well-written release notes file for version `2.1.0` of a fictional pack:
+
+```markdown
+#### Integrations
+
+##### Example Security Platform
+- Added the **example-list-alerts** command that returns a paginated list of active alerts.
+- Added the **example-close-alert** command that closes an alert by ID and records a closure reason.
+- Updated the Docker image to *demisto/python3:3.11.9.100775* to address CVE-2024-12345.
+
+#### Playbooks
+
+##### Example - Investigate Alert
+- Added a conditional task to check alert severity before escalating, reducing false-positive escalations.
+
+#### Scripts
+
+##### ExampleParseResponse
+- Fixed an issue where timestamps in UTC+0 were incorrectly parsed as local time.
+```
+
+## What Requires Release Notes
+
+**Always add release notes** when you change:
+
+- Integration commands (new command, modified arguments, changed outputs)
+- Scripts (new script, modified logic, changed arguments)
+- Playbooks (new playbook, modified tasks or branching logic)
+- Docker image versions in any YAML definition
+- Incident fields, classifiers, mappers, or layouts
+- Pack metadata (description, tags, categories)
+
+**Release notes are NOT required** for:
+
+- Updates to `README.md` files only (documentation-only changes)
+- Changes to internal test files (`*_test.py`) that do not affect functionality
+- Changes to `test_data/` or `tests_data/` directories
+
+## Generating Release Notes with demisto-sdk
+
+The `demisto-sdk update-release-notes` command generates a template file pre-populated with the entities that changed, based on your git diff. It also updates `currentVersion` in `pack_metadata.json` automatically.
+
+```bash
+# Bump patch version (bug fix)
+demisto-sdk update-release-notes -i Packs/MyPack/ -u patch
+
+# Bump minor version (new feature)
+demisto-sdk update-release-notes -i Packs/MyPack/ -u minor
+
+# Bump major version (breaking change)
+demisto-sdk update-release-notes -i Packs/MyPack/ -u major
+```
+
+The command creates a new file at `Packs/MyPack/ReleaseNotes/<new_version>.md` and updates `pack_metadata.json`. Open the generated file and fill in the placeholder text with human-readable descriptions.
+
+## Updating pack_metadata.json
+
+The `currentVersion` field in `pack_metadata.json` must always match the latest release notes file name. After running `demisto-sdk update-release-notes`, the SDK updates this automatically. If you create the release notes file manually, you must update `pack_metadata.json` yourself:
+
+```json
+{
+  "name": "MyPack",
+  "description": "My example Pack description.",
+  "support": "community",
+  "currentVersion": "1.1.0",
+  "author": "Your Name",
+  "url": "https://github.com/your-org",
+  "categories": ["Utilities"],
+  "tags": [],
+  "useCases": [],
+  "keywords": []
+}
+```
+
+A mismatch between `currentVersion` and the release notes files will cause `demisto-sdk validate` to fail.
+
+## The Release Notes Workflow
+
+<Steps>
+  <Step title="Make your content changes">
+    Edit or create files under `Packs/MyPack/`. When you are satisfied with the implementation, run `demisto-sdk format -i Packs/MyPack/` to auto-fix any style issues.
+  </Step>
+
+  <Step title="Determine the correct version bump">
+    Review your changes against the versioning rules above. New commands and new content entities warrant a **minor** bump. Bug fixes warrant a **patch** bump. Breaking changes to existing commands warrant a **major** bump.
+  </Step>
+
+  <Step title="Generate the release notes template">
+    Run the SDK command with the appropriate `-u` flag:
+
+    ```bash
+    demisto-sdk update-release-notes -i Packs/MyPack/ -u minor
+    ```
+
+    The SDK inspects your git diff, identifies changed entities, creates the versioned `.md` file, and updates `pack_metadata.json`.
+  </Step>
+
+  <Step title="Edit the generated file">
+    Open `Packs/MyPack/ReleaseNotes/<version>.md`. Replace the placeholder text (typically `%%UPDATE_RN%%`) with clear, user-facing descriptions of each change. Write for the person who will read this in the Marketplace changelog — avoid internal jargon.
+  </Step>
+
+  <Step title="Verify pack_metadata.json">
+    Confirm that `currentVersion` in `pack_metadata.json` matches the new version number exactly. If they differ, update `pack_metadata.json` manually.
+  </Step>
+
+  <Step title="Run validate to confirm">
+    ```bash
+    demisto-sdk validate -i Packs/MyPack/
+    ```
+
+    A clean validate output confirms that the release notes file is correctly formatted and that `currentVersion` is consistent. Resolve any reported errors before pushing.
+  </Step>
+
+  <Step title="Commit and open your PR">
+    Include the release notes file and the updated `pack_metadata.json` in the same commit as your content changes. CI will verify that release notes are present and correctly structured as part of the automated validation pipeline.
+  </Step>
+</Steps>
+
+<Tip>
+  If you forget to add release notes and CI fails, simply run `demisto-sdk update-release-notes -i Packs/MyPack/ -u patch` (or the appropriate bump level), fill in the generated file, and push again. There is no need to close and reopen the PR.
+</Tip>

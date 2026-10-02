@@ -1,0 +1,233 @@
+---
+title: "Pack Directory Structure and Metadata Requirements"
+sidebarTitle: "Pack Structure"
+description: "Every Cortex XSOAR Pack follows a standard directory layout with required metadata files, versioned release notes, and entity subdirectories."
+---
+
+A Pack is the fundamental unit of distribution in the Cortex XSOAR Content repository. Every piece of content — whether it is an Integration, a Script, a Playbook, or a Dashboard — must live inside a Pack, and every Pack must follow a precisely defined directory layout. The structure is enforced by `demisto-sdk validate` and by CI, so deviations will block merging. Understanding this layout from the start saves significant rework later.
+
+<Warning>
+  Flat structures are forbidden. Every entity must be in its own subdirectory under its entity type. Placing an integration's `.py` file directly inside `Packs/MyPack/Integrations/` (rather than `Packs/MyPack/Integrations/MyIntegration/`) will fail validation.
+</Warning>
+
+## Top-Level Pack Directory
+
+All Packs live under the repository-root `Packs/` directory:
+
+```
+Packs/
+└── <PackName>/
+```
+
+The Pack directory name must be unique across the repository and conventionally uses PascalCase (for example, `CommonScripts`, `CortexXDR`, `SplunkPy`).
+
+## Full Directory Tree
+
+The tree below shows all standard subdirectories. Required subdirectories are those that are almost always present; the remainder are optional and are only created when the Pack includes that type of content.
+
+```
+Packs/
+└── MyPack/
+    │
+    ├── pack_metadata.json              # REQUIRED — Pack identity and marketplace config
+    │
+    ├── Integrations/                   # REQUIRED (if Pack has integrations)
+    │   └── MyIntegration/
+    │       ├── MyIntegration.py        # Integration logic
+    │       ├── MyIntegration.yml       # Integration definition and command schema
+    │       ├── MyIntegration_test.py   # Unit tests (pytest)
+    │       └── README.md              # Integration documentation
+    │
+    ├── Scripts/                        # REQUIRED (if Pack has scripts)
+    │   └── MyScript/
+    │       ├── MyScript.py
+    │       ├── MyScript.yml
+    │       ├── MyScript_test.py
+    │       └── README.md
+    │
+    ├── Playbooks/                      # REQUIRED (if Pack has playbooks)
+    │   ├── MyPlaybook.yml
+    │   └── MyPlaybook_README.md
+    │
+    ├── ReleaseNotes/                   # REQUIRED — one file per released version
+    │   ├── 1_0_0.md
+    │   ├── 1_0_1.md
+    │   └── 1_1_0.md
+    │
+    ├── IncidentFields/                 # Optional
+    │   └── incidentfield-MyField.json
+    │
+    ├── IncidentTypes/                  # Optional
+    │   └── incidenttype-MyType.json
+    │
+    ├── Layouts/                        # Optional
+    │   └── layoutscontainer-MyLayout.json
+    │
+    ├── Dashboards/                     # Optional
+    │   └── dashboard-MyDashboard.json
+    │
+    ├── Classifiers/                    # Optional
+    │   ├── classifier-MyClassifier.json
+    │   └── classifier-mapper-MyClassifier.json
+    │
+    ├── ModelingRules/                  # Optional — XSIAM modeling rules
+    │   └── MyModelingRule/
+    │       ├── MyModelingRule.yml
+    │       └── MyModelingRule.xif
+    │
+    └── ParsingRules/                   # Optional — XSIAM parsing rules
+        └── MyParsingRule/
+            ├── MyParsingRule.yml
+            └── MyParsingRule.xif
+```
+
+## The pack_metadata.json File
+
+Every Pack must contain a `pack_metadata.json` file at its root. This file is the single source of truth for Pack identity, support level, versioning, and marketplace targeting. The following fields are required:
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | string | Human-readable Pack display name |
+| `description` | string | One-sentence summary of the Pack's purpose |
+| `support` | string | Support tier: `"xsoar"` (Palo Alto Networks), `"partner"`, or `"community"` |
+| `currentVersion` | string | Semantic version (`"MAJOR.MINOR.PATCH"`) |
+| `author` | string | Name of the Pack author or organisation |
+| `url` | string | URL for support or product information |
+| `categories` | array | List of marketplace category strings (for example, `["Endpoint"]`) |
+| `marketplaces` | array | List of target marketplace identifiers |
+
+The following is the real `pack_metadata.json` from the **CommonScripts** Pack, which ships as part of the Cortex XSOAR core content:
+
+```json
+{
+    "name": "Common Scripts",
+    "description": "Frequently used scripts pack.",
+    "support": "xsoar",
+    "currentVersion": "1.22.58",
+    "author": "Cortex XSOAR",
+    "url": "https://www.paloaltonetworks.com/cortex",
+    "email": "",
+    "created": "2020-05-14T08:33:25Z",
+    "categories": [
+        "Utilities"
+    ],
+    "tags": [
+        "Core"
+    ],
+    "useCases": [],
+    "keywords": [],
+    "dependencies": {
+        "DemistoRESTAPI": {
+            "mandatory": true,
+            "display_name": "Demisto REST API"
+        },
+        "FeedMitreAttackv2": {
+            "mandatory": false,
+            "display_name": "MITRE ATT&CK v2"
+        },
+        "Gmail": {
+            "mandatory": false,
+            "display_name": "Gmail"
+        },
+        "MailSenderNew": {
+            "mandatory": false,
+            "display_name": "Mail Sender (New)"
+        },
+        "GmailSingleUser": {
+            "mandatory": false,
+            "display_name": "Gmail Single User (Beta)"
+        },
+        "MicrosoftGraphMail": {
+            "mandatory": false,
+            "display_name": "Microsoft Graph Mail"
+        },
+        "MicrosoftGraphListener": {
+            "mandatory": false,
+            "display_name": "Microsoft Graph Mail Single User"
+        },
+        "RemoteAccess": {
+            "mandatory": false,
+            "display_name": "RemoteAccess v2"
+        }
+    },
+    "excludedDependencies": [
+        "GoogleMaps",
+        "Slack"
+    ],
+    "marketplaces": [
+        "xsoar",
+        "marketplacev2",
+        "xpanse",
+        "platform"
+    ],
+    "supportedModules": [
+        "asm",
+        "exposure_management",
+        "agentix",
+        "cloud",
+        "cloud_runtime_security",
+        "cloud_posture",
+        "xsiam",
+        "edr",
+        "xti",
+        "tim"
+    ]
+}
+```
+
+## Entity Subdirectory Pattern
+
+Every entity type follows the same nested pattern:
+
+```
+Packs/<PackName>/<EntityType>/<EntityName>/
+```
+
+For integrations specifically, the four core files inside that directory are:
+
+| File | Purpose |
+|---|---|
+| `<Name>.py` | Integration implementation in Python |
+| `<Name>.yml` | YAML definition: display name, configuration parameters, command schemas, Docker image |
+| `<Name>_test.py` | Unit tests written with `pytest`, using `demistomock` and `requests_mock` |
+| `README.md` | Human-readable documentation for the integration, including command descriptions and examples |
+
+For example, the `CortexXDRIR` integration inside the `CortexXDR` Pack lives at:
+
+```
+Packs/CortexXDR/Integrations/CortexXDRIR/
+├── CortexXDRIR.py
+├── CortexXDRIR.yml
+├── CortexXDRIR_test.py
+└── README.md
+```
+
+Scripts follow the same pattern under `Scripts/<ScriptName>/`. Playbooks are a slight exception — they are YAML files directly inside `Playbooks/` (not nested in their own subdirectory) and are accompanied by a `<PlaybookName>_README.md` file.
+
+## Versioning and Release Notes
+
+Every change to any content within a Pack must be accompanied by a new release notes entry. The file name uses underscores in place of dots to match the version string in `pack_metadata.json`:
+
+```
+Packs/<PackName>/ReleaseNotes/<Major>_<Minor>_<Patch>.md
+```
+
+For example, bumping `CommonScripts` from `1.22.57` to `1.22.58` requires creating `Packs/CommonScripts/ReleaseNotes/1_22_58.md`. The file content follows a conventional structure grouping changes by entity type:
+
+```markdown
+#### Scripts
+##### MyScript
+- Fixed an edge case when the input list is empty.
+
+#### Integrations
+##### MyIntegration
+- Added the `myintegration-list-alerts` command.
+```
+
+The `demisto-sdk validate` command will fail if `currentVersion` in `pack_metadata.json` does not have a corresponding file in `ReleaseNotes/`. Always update both in the same commit.
+
+## Metadata Across Marketplaces
+
+The `marketplaces` array in `pack_metadata.json` controls which Cortex platform storefronts the Pack appears in. A Pack can target multiple marketplaces simultaneously, as the CommonScripts example above demonstrates (`xsoar`, `marketplacev2`, `xpanse`, and `platform`). Some Packs are more narrowly scoped — the CortexXDR Pack, for instance, targets only `xsoar`, `xpanse`, and `platform`, omitting `marketplacev2`.
+
+The optional `supportedModules` array provides finer-grained control over which licensed modules within a marketplace the Pack is compatible with (for example, `xsiam`, `edr`, `tim`, `cloud`).

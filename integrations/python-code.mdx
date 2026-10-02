@@ -1,0 +1,276 @@
+---
+title: "Writing Cortex XSOAR Integration Python Code"
+sidebarTitle: "Python Code"
+description: "Every XSOAR integration follows a standard Python pattern: import runtime modules, define a Client class, implement command functions, and dispatch in main()."
+---
+
+Every Cortex XSOAR integration Python file follows the same structure. Understanding this structure lets you read any integration in the content repository and write your own with confidence. The pattern is deliberately simple: imports at the top, a `Client` class for HTTP communication, one function per command, and a `main()` function that reads the current command name and dispatches to the right handler.
+
+## Mandatory Imports
+
+Every integration file must begin with these two imports:
+
+```python
+import demistomock as demisto
+from CommonServerPython import *
+```
+
+`demistomock` provides the `demisto` object — the integration's interface to the XSOAR platform. It exposes `demisto.params()`, `demisto.args()`, `demisto.command()`, `demisto.results()`, `demisto.debug()`, and all other platform APIs.
+
+`CommonServerPython` is a standard library module provided by the XSOAR platform that gives every integration access to `BaseClient`, `CommandResults`, `return_results()`, `return_error()`, `tableToMarkdown()`, `DemistoException`, and dozens of other utilities.
+
+<Note>
+  Neither `demistomock` nor `CommonServerPython` are pip-installable packages. They are injected into the execution environment at runtime by the XSOAR platform. Do not attempt to install them via Docker or add them to `requirements.txt`. Importing them at the top of every file is mandatory — the runtime injection does not work without the explicit import statement.
+</Note>
+
+## Standard Code Structure
+
+A well-structured integration file has five sections, always in this order:
+
+<Steps>
+  <Step title="Imports and globals">
+    `demistomock`, `CommonServerPython`, any standard-library modules you need, and integration-level constants.
+  </Step>
+  <Step title="Client class">
+    A `Client(BaseClient)` subclass. Contains only HTTP wrapper methods — no business logic, no argument parsing, no output formatting.
+  </Step>
+  <Step title="Command functions">
+    One function per command: `def get_alert_command(client, args) -> CommandResults`. Reads from `args`, calls `client` methods, formats the response, and returns `CommandResults`.
+  </Step>
+  <Step title="main() function">
+    Reads `demisto.command()`, `demisto.params()`, constructs a `Client` instance, dispatches to the right command function, and handles top-level exceptions.
+  </Step>
+  <Step title="Entry-point guard">
+    `if __name__ == 'builtins': main()` — fires the main function when the script is executed by the XSOAR runtime.
+  </Step>
+</Steps>
+
+## Using `demisto.params()` and `demisto.args()`
+
+`demisto.params()` returns a dict of the instance configuration values set by the administrator when they created the integration instance. Use it in `main()` to construct your `Client`:
+
+```python
+params = demisto.params()
+base_url = params.get('url')
+verify_ssl = not params.get('insecure', False)
+proxy = params.get('proxy', False)
+api_key = params.get('apikey')
+```
+
+`demisto.args()` returns a dict of the arguments passed to the current command invocation. Use it inside command functions:
+
+```python
+def get_alert_command(client: Client, args: dict) -> CommandResults:
+    alert_id = args.get('alert_id', '')
+    ...
+```
+
+## Error Handling and Logging
+
+Use `return_error()` for expected, user-facing errors (invalid arguments, authentication failures, resource not found). This function formats the error as a War Room entry and exits the script:
+
+```python
+return_error(f'Alert {alert_id} was not found. Verify the ID and try again.')
+```
+
+For unexpected errors, raise `DemistoException` or let the top-level `except` in `main()` call `return_error()`:
+
+```python
+except Exception as e:
+    return_error(f'Error in MyVendor Integration [{e}]', error=e)
+```
+
+Use `demisto.debug()` and `demisto.info()` for diagnostic logging. Never use `print()` — print output is not captured by the XSOAR log system and will not appear in integration logs.
+
+```python
+demisto.debug(f'Command being called is {demisto.command()}')
+demisto.info(f'Fetched {len(alerts)} alerts from API')
+```
+
+## Complete Minimal Integration Example
+
+The following example is a complete, working integration that demonstrates every structural element. It is based on the patterns established in the official content repository templates.
+
+```python
+import demistomock as demisto
+from CommonServerPython import *
+
+import urllib3
+
+# Disable insecure-request warnings when SSL verification is disabled
+urllib3.disable_warnings()
+
+INTEGRATION_NAME = 'MyVendor Integration'
+INTEGRATION_COMMAND_NAME = 'myvendor'
+INTEGRATION_CONTEXT_NAME = 'MyVendor'
+
+
+""" CLIENT CLASS """
+
+
+class Client(BaseClient):
+    """Wraps the MyVendor REST API.
+
+    Inherits from BaseClient to get proxy support, SSL verification,
+    and consistent HTTP error handling via _http_request().
+    """
+
+    def get_alert(self, alert_id: str) -> dict:
+        """Retrieve a single alert by ID."""
+        return self._http_request(
+            method='GET',
+            url_suffix='alerts',
+            params={'alertId': alert_id},
+        )
+
+    def list_alerts(self, limit: int = 50) -> dict:
+        """Retrieve a list of recent alerts."""
+        return self._http_request(
+            method='GET',
+            url_suffix='alerts',
+            params={'limit': limit},
+        )
+
+
+""" HELPER FUNCTIONS """
+
+
+def alert_to_context(alert: dict) -> dict:
+    """Convert a raw API alert object to XSOAR context format (CamelCase keys)."""
+    return {
+        'ID': alert.get('alertId'),
+        'Severity': alert.get('severity'),
+        'Description': alert.get('description'),
+        'Created': alert.get('createdAt'),
+        'IsActive': alert.get('isActive'),
+    }
+
+
+""" COMMAND FUNCTIONS """
+
+
+def test_module_command(client: Client) -> str:
+    """Validates connectivity and authentication by calling the alerts endpoint."""
+    client.list_alerts(limit=1)
+    return 'ok'
+
+
+def get_alert_command(client: Client, args: dict) -> CommandResults:
+    """Returns a single alert by ID."""
+    alert_id = args.get('alert_id', '')
+    raw_response = client.get_alert(alert_id)
+
+    alert = raw_response.get('alert')
+    if not alert:
+        return CommandResults(
+            readable_output=f'{INTEGRATION_NAME} - Alert `{alert_id}` was not found.',
+        )
+
+    context_entry = alert_to_context(alert)
+    readable_output = tableToMarkdown(
+        name=f'{INTEGRATION_NAME} - Alert {alert_id}',
+        t=context_entry,
+        removeNull=True,
+    )
+
+    return CommandResults(
+        outputs_prefix=f'{INTEGRATION_CONTEXT_NAME}.Alert',
+        outputs_key_field='ID',
+        outputs=context_entry,
+        readable_output=readable_output,
+        raw_response=raw_response,
+    )
+
+
+def list_alerts_command(client: Client, args: dict) -> CommandResults:
+    """Returns a list of recent alerts."""
+    limit = int(args.get('limit', 50))
+    raw_response = client.list_alerts(limit=limit)
+
+    alerts = raw_response.get('alerts', [])
+    if not alerts:
+        return CommandResults(
+            readable_output=f'{INTEGRATION_NAME} - No alerts found.',
+        )
+
+    context_entries = [alert_to_context(a) for a in alerts]
+    readable_output = tableToMarkdown(
+        name=f'{INTEGRATION_NAME} - Alerts List',
+        t=context_entries,
+        headers=['ID', 'Severity', 'Description', 'Created', 'IsActive'],
+        removeNull=True,
+    )
+
+    return CommandResults(
+        outputs_prefix=f'{INTEGRATION_CONTEXT_NAME}.Alert',
+        outputs_key_field='ID',
+        outputs=context_entries,
+        readable_output=readable_output,
+        raw_response=raw_response,
+    )
+
+
+""" MAIN FUNCTION """
+
+
+def main() -> None:  # pragma: no cover
+    params = demisto.params()
+    base_url = params.get('url', '').rstrip('/') + '/api/v1/'
+    verify_ssl = not params.get('insecure', False)
+    proxy = params.get('proxy', False)
+    api_key = params.get('apikey', '')
+
+    client = Client(
+        base_url=base_url,
+        verify=verify_ssl,
+        proxy=proxy,
+        headers={'Authorization': f'Bearer {api_key}'},
+    )
+
+    command = demisto.command()
+    demisto.debug(f'Command being called is {command}')
+
+    commands = {
+        f'{INTEGRATION_COMMAND_NAME}-get-alert': get_alert_command,
+        f'{INTEGRATION_COMMAND_NAME}-list-alerts': list_alerts_command,
+    }
+
+    try:
+        if command == 'test-module':
+            result = test_module_command(client)
+            return_results(result)
+        elif command in commands:
+            return_results(commands[command](client, demisto.args()))
+        else:
+            raise NotImplementedError(f'Command {command} is not implemented.')
+    except Exception as e:
+        return_error(f'Error in {INTEGRATION_NAME} Integration [{e}]', error=e)
+
+
+""" ENTRY POINT """
+
+if __name__ == 'builtins':
+    main()
+```
+
+<Note>
+  The entry-point guard is `if __name__ == 'builtins': main()` — not `if __name__ == '__main__'`. When XSOAR executes an integration script it injects it as a Python builtin module, not as a top-level `__main__` script. Using `__main__` means `main()` is never called in production. The template uses `'builtins'` (Python 3) and the older form `'__builtin__'` (Python 2) was also common in legacy integrations.
+</Note>
+
+## Type Hints and Code Style
+
+The XSOAR toolchain enforces `mypy` type checking via `demisto-sdk pre-commit`. Always annotate function signatures:
+
+```python
+def get_alert_command(client: Client, args: dict) -> CommandResults:
+    ...
+
+def alert_to_context(alert: dict) -> dict:
+    ...
+```
+
+Keep functions short (around 30 lines), use guard clauses to avoid deep nesting, and avoid hardcoded credentials — always read sensitive values from `demisto.params()`.
+
+<Tip>
+  Run `demisto-sdk format -i <path>` after writing your Python file. The SDK applies `autopep8` and `isort` formatting automatically, ensuring the file passes CI lint checks before you open a pull request.
+</Tip>

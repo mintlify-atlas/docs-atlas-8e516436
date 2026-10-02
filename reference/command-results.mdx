@@ -1,0 +1,264 @@
+---
+title: "CommandResults Class Reference for Cortex XSOAR Output"
+sidebarTitle: "CommandResults"
+description: "Full API reference for CommandResults — the standard return object for all XSOAR commands. Documents every constructor parameter and return_results() usage."
+---
+
+`CommandResults` is the standard object used to return data from every XSOAR command. It carries machine-readable context data, a human-readable markdown string for the War Room, the raw API response, indicator objects, entity relationships, and scheduling metadata — all in a single, structured return value. You should always use `CommandResults` in combination with `return_results()` rather than calling `demisto.results()` directly.
+
+```python
+from CommonServerPython import *
+```
+
+---
+
+## Constructor
+
+```python
+class CommandResults:
+    def __init__(
+        self,
+        outputs_prefix=None,
+        outputs_key_field=None,
+        outputs=None,
+        indicators=None,
+        readable_output=None,
+        raw_response=None,
+        indicators_timeline=None,
+        indicator=None,
+        ignore_auto_extract=False,
+        mark_as_note=False,
+        tags=None,
+        scheduled_command=None,
+        relationships=None,
+        entry_type=None,
+        content_format=None,
+        extended_payload=None,
+        execution_metrics=None,
+        replace_existing=False,
+    )
+```
+
+<ParamField path="outputs_prefix" type="str">
+  The dot-path context key prefix. Must match the `contextPath` prefix declared in the integration YAML outputs section. For example: `'CortexXDR.Incident'`. Required whenever `outputs` is a non-`None` value.
+</ParamField>
+
+<ParamField path="outputs_key_field" type="str or list[str]">
+  The field name (or list of field names) that uniquely identifies each record within `outputs`. XSOAR uses this to build a DT expression for deduplicating context entries. For example, if each incident has an `incident_id` field: `outputs_key_field='incident_id'`. For composite keys: `outputs_key_field=['org_id', 'incident_id']`.
+</ParamField>
+
+<ParamField path="outputs" type="dict or list or None">
+  The machine-readable data to write to the incident context. Must be a `dict` or `list` of `dict`. When a non-`None` value is provided, `outputs_prefix` is required. Set to `None` to produce a human-readable-only entry with no context update.
+</ParamField>
+
+<ParamField path="readable_output" type="str">
+  A markdown string displayed in the War Room under **Human Readable**. When not provided and `outputs` is set, a markdown table is auto-generated from `outputs` using `tableToMarkdown('Results', outputs)`.
+</ParamField>
+
+<ParamField path="raw_response" type="any">
+  The original, unmodified API response. Stored as the entry `Contents` field in the War Room but not written to the incident context. Defaults to the value of `outputs` when not provided. Typically the full JSON/dict returned by the vendor API.
+</ParamField>
+
+<ParamField path="indicator" type="Common.Indicator">
+  A single indicator object such as `Common.IP`, `Common.URL`, `Common.Domain`, `Common.File`, or `Common.CVE`. The indicator's `to_context()` method is called to produce context entries. Use `indicator` (singular) for one indicator, or `indicators` (plural, deprecated) for a list.
+</ParamField>
+
+<ParamField path="indicators" type="list" deprecated>
+  **Deprecated.** Use `indicator` instead for a single indicator or make multiple `CommandResults` objects.
+</ParamField>
+
+<ParamField path="indicators_timeline" type="IndicatorsTimeline">
+  An `IndicatorsTimeline` object used by the server to populate the timeline panel of an indicator. Rarely used outside of enrichment integrations.
+</ParamField>
+
+<ParamField path="relationships" type="list[EntityRelationship]">
+  A list of `EntityRelationship` objects describing relationships between indicators (e.g., IP `related-to` Domain). Used to populate the indicator relationship graph.
+</ParamField>
+
+<ParamField path="tags" type="list[str]">
+  A list of string tags to attach to the War Room entry. Tags are searchable within the incident War Room.
+</ParamField>
+
+<ParamField path="mark_as_note" type="bool" default="False">
+  When `True`, the War Room entry is marked as a **Note**, which pins it in the summary view.
+</ParamField>
+
+<ParamField path="ignore_auto_extract" type="bool" default="False">
+  When `True`, the XSOAR auto-extract engine will not scan the entry output for indicators. Useful when returning raw data that should not trigger indicator creation.
+</ParamField>
+
+<ParamField path="scheduled_command" type="ScheduledCommand">
+  A `ScheduledCommand` instance that tells the platform to re-execute this command after a delay. Used for implementing polling commands that wait for long-running async operations.
+</ParamField>
+
+<ParamField path="entry_type" type="int">
+  An `EntryType` constant. Defaults to `EntryType.NOTE` (`1`). Automatically set to `EntryType.EXECUTION_METRICS` (`19`) when `execution_metrics` is provided.
+</ParamField>
+
+<ParamField path="content_format" type="str">
+  An `EntryFormat` constant controlling the rendering of `raw_response` in the entry `ContentsFormat` field. Auto-detected when `None`: strings and integers use `EntryFormat.TEXT`; dicts and lists use `EntryFormat.JSON`.
+</ParamField>
+
+<ParamField path="execution_metrics" type="ExecutionMetrics">
+  An `ExecutionMetrics` instance for reporting API call counts (success, quota errors, auth errors, etc.) to the XSOAR server for dashboard display.
+</ParamField>
+
+<ParamField path="extended_payload" type="dict">
+  A dictionary written to the `ExtendedPayload` field of the return entry. Used for synchronisation and by agentic workflows.
+</ParamField>
+
+<ParamField path="replace_existing" type="bool" default="False">
+  When `True`, replaces (rather than merges) the value at the `outputs_prefix` path in the context. Requires `outputs_prefix` to be a nested path containing a period, e.g. `'Integration.NextToken'`. Useful for overwriting pagination tokens.
+</ParamField>
+
+---
+
+## `return_results(results)`
+
+The top-level function for sending command output back to the XSOAR platform. Accepts a single `CommandResults` object, a list of `CommandResults`, or a raw War Room entry dict.
+
+```python
+def return_results(results):
+    ...
+```
+
+Internally calls `CommandResults.to_context()` on each object and passes the resulting dict to `demisto.results()`.
+
+```python
+# Single result
+return_results(CommandResults(
+    outputs_prefix='MyIntegration.Alert',
+    outputs_key_field='id',
+    outputs=alert_data,
+))
+
+# Multiple results
+results = [result1, result2, metrics.metrics]
+return_results(results)
+```
+
+---
+
+## `return_error(message, error=None, outputs=None)`
+
+Creates an error War Room entry and calls `sys.exit(0)` to terminate the command execution. Always raises `SystemExit` — code after this call will not run.
+
+```python
+return_error(f'Failed to connect to API: {str(e)}', error=e)
+```
+
+---
+
+## `tableToMarkdown(name, t, headers=None, headerTransform=None, removeNull=False, metadata=None, url_keys=None, date_fields=None)`
+
+Generates a Markdown table string from a `dict` or `list[dict]`. Commonly used to build `readable_output`.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `name` | `str` | Table title rendered above the table. |
+| `t` | `dict` or `list[dict]` | The data to render. |
+| `headers` | `list[str]` | Column names. When `None`, all keys from the first row are used. |
+| `headerTransform` | `callable` | Function to transform column header strings (e.g., `pascalToSpace`). |
+| `removeNull` | `bool` | When `True`, removes columns where all values are `None`. |
+| `url_keys` | `list[str]` | Column names whose values should be rendered as hyperlinks. |
+| `date_fields` | `list[str]` | Column names containing epoch timestamps to be formatted as dates. |
+
+---
+
+## Usage Examples
+
+<CodeGroup>
+
+```python Enrich an IP address
+from CommonServerPython import *
+
+def ip_command(client: Client, args: dict) -> CommandResults:
+    ip_value = args.get('ip', '')
+    result = client.get_ip_reputation(ip_value)
+
+    dbot_score = Common.DBotScore(
+        indicator=ip_value,
+        indicator_type=DBotScoreType.IP,
+        integration_name='MyThreatIntel',
+        score=Common.DBotScore.BAD if result.get('malicious') else Common.DBotScore.GOOD,
+        reliability=DBotScoreReliability.B,
+    )
+    ip_indicator = Common.IP(
+        ip=ip_value,
+        dbot_score=dbot_score,
+        asn=result.get('asn'),
+        geo_country=result.get('country'),
+    )
+
+    return CommandResults(
+        outputs_prefix='MyThreatIntel.IP',
+        outputs_key_field='Address',
+        outputs={'Address': ip_value, 'ASN': result.get('asn')},
+        readable_output=tableToMarkdown('IP Reputation', result),
+        raw_response=result,
+        indicator=ip_indicator,
+    )
+```
+
+```python Return context with deduplication key
+from CommonServerPython import *
+
+def get_incidents_command(client: Client, args: dict) -> CommandResults:
+    incidents = client.list_incidents(limit=int(args.get('limit', 10)))
+
+    return CommandResults(
+        outputs_prefix='CortexXDR.Incident',
+        outputs_key_field='incident_id',
+        outputs=incidents,
+        readable_output=tableToMarkdown(
+            'Incidents',
+            incidents,
+            headers=['incident_id', 'severity', 'status', 'description'],
+        ),
+        raw_response=incidents,
+    )
+```
+
+```python Polling command with ScheduledCommand
+from CommonServerPython import *
+
+def scan_command(client: Client, args: dict) -> CommandResults:
+    scan_id = args.get('scan_id')
+
+    if not scan_id:
+        # First execution: kick off the scan
+        scan_id = client.start_scan(args.get('target'))
+        scheduled_command = ScheduledCommand(
+            command='myvend-get-scan',
+            next_run_in_seconds=30,
+            args={'scan_id': scan_id},
+            timeout_in_seconds=600,
+        )
+        return CommandResults(
+            readable_output=f'Scan {scan_id} started. Polling for results...',
+            scheduled_command=scheduled_command,
+        )
+
+    # Subsequent execution: check status
+    result = client.get_scan(scan_id)
+    if result.get('status') == 'running':
+        scheduled_command = ScheduledCommand(
+            command='myvend-get-scan',
+            next_run_in_seconds=30,
+            args={'scan_id': scan_id},
+            timeout_in_seconds=600,
+        )
+        return CommandResults(
+            readable_output='Scan still in progress...',
+            scheduled_command=scheduled_command,
+        )
+
+    return CommandResults(
+        outputs_prefix='MyVendor.Scan',
+        outputs_key_field='id',
+        outputs=result,
+        readable_output=tableToMarkdown('Scan Results', result),
+    )
+```
+
+</CodeGroup>

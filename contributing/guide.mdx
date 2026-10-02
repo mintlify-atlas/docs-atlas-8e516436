@@ -1,0 +1,188 @@
+---
+title: "Contributing to the Cortex XSOAR Content Repository"
+sidebarTitle: "Contribution Guide"
+description: "Learn how to contribute Integrations, Playbooks, and Scripts to the Cortex XSOAR open-source content repository through the standard GitHub Pull Request workflow."
+---
+
+The [demisto/content](https://github.com/demisto/content) repository is the open-source home of everything that powers Cortex XSOAR — Integrations, Playbooks, Automation Scripts, Report Templates, Modeling Rules, and more. Maintained by Palo Alto Networks and actively shaped by the global security community, the repo welcomes contributions of all sizes: a single bug fix, a brand-new Pack, or a documentation improvement. If you work in security operations and want to share something useful, a Pull Request is always welcome.
+
+## Who Can Contribute
+
+The content repository is open to anyone in the security community. Whether you are a MSSP, an independent researcher, a vendor building an integration for your own product, or an XSOAR customer who has built a useful playbook, you are encouraged to contribute. All contributors must agree to the Contributor License Agreement (CLA) the first time they open a PR — the GitHub CLA bot will prompt you automatically.
+
+This project is governed by the [Contributor Covenant Code of Conduct](https://github.com/demisto/content/blob/master/CODE_OF_CONDUCT.md). Everyone participating — contributors, reviewers, and community members — is expected to uphold a welcoming, inclusive, and respectful environment.
+
+## Types of Contributions
+
+<CardGroup cols={2}>
+  <Card title="New Packs" icon="box">
+    Bundle a new Integration, Playbooks, Scripts, and supporting content into a self-contained Pack directory under `Packs/`.
+  </Card>
+  <Card title="New Integrations" icon="plug">
+    Add a new vendor or product integration inside an existing Pack, complete with YAML definition, Python implementation, and README.
+  </Card>
+  <Card title="Bug Fixes" icon="bug">
+    Fix broken commands, incorrect field mappings, or logic errors in any existing Integration or Script.
+  </Card>
+  <Card title="Documentation" icon="book">
+    Improve or add README files, usage examples, or inline code comments. Documentation-only PRs are equally valued.
+  </Card>
+  <Card title="Playbooks" icon="workflow">
+    Contribute new automation playbooks or improve existing ones with better error handling and additional branching logic.
+  </Card>
+  <Card title="Scripts" icon="code">
+    Add utility scripts written in Python or JavaScript that perform Security Operations tasks within the platform.
+  </Card>
+</CardGroup>
+
+## Prerequisites Before Opening a PR
+
+Before you submit a pull request, make sure each of the following conditions is satisfied:
+
+- **CLA signed** — the GitHub CLA bot will block the PR until it is signed.
+- **Pre-commit passes** — run `demisto-sdk pre-commit -i Packs/YourPack/` locally and fix all errors before pushing. See [Testing & Linting](/contributing/testing-and-linting) for details.
+- **Pack metadata present** — every new Pack must include a `pack_metadata.json` file at the Pack root.
+- **Release notes added** — any change to content (commands, scripts, playbooks, Docker images) requires a new release notes file. See [Release Notes](/contributing/release-notes) for the exact format.
+- **Integration README** — new Integrations must include a `README.md` inside the integration directory describing commands, arguments, and outputs.
+
+<Note>
+  For large contributions — such as a new Pack that contains multiple Integrations — open a design issue on GitHub first to discuss the approach with the XSOAR team before writing code. This saves iteration cycles and ensures your work aligns with platform conventions.
+</Note>
+
+## Pack Structure
+
+Every contribution lives inside a Pack. Packs follow a strict directory layout that the platform and the `demisto-sdk` tooling depend on:
+
+```
+Packs/
+└── MyPack/
+    ├── pack_metadata.json          # Required: Pack name, version, author, tags
+    ├── Integrations/
+    │   └── MyIntegration/
+    │       ├── MyIntegration.py    # Implementation
+    │       ├── MyIntegration.yml   # Commands, arguments, outputs
+    │       ├── MyIntegration_test.py
+    │       └── README.md
+    ├── Playbooks/
+    │   └── MyPlaybook.yml
+    ├── Scripts/
+    │   └── MyScript/
+    │       ├── MyScript.py
+    │       └── MyScript.yml
+    └── ReleaseNotes/
+        └── 1_0_0.md
+```
+
+Flat structures (placing integration files directly under `Packs/MyPack/` without the `Integrations/MyIntegration/` sub-directory) are forbidden and will fail CI validation.
+
+## The PR Workflow
+
+<Steps>
+  <Step title="Fork the repository">
+    Visit [github.com/demisto/content](https://github.com/demisto/content) and click **Fork**. Clone your fork locally:
+
+    ```bash
+    git clone https://github.com/<your-username>/content.git
+    cd content
+    ```
+  </Step>
+
+  <Step title="Create a feature branch">
+    Branch off `master`. Use a descriptive name that reflects what the PR does:
+
+    ```bash
+    git checkout master
+    git pull origin master
+    git checkout -b feat/my-integration-name
+    ```
+  </Step>
+
+  <Step title="Build your changes following the Pack structure">
+    Create or modify files under `Packs/<PackName>/`. Every new Pack needs `pack_metadata.json`. Every Integration needs a YAML definition, a Python implementation, a test file, and a README. Refer to `Templates/` in the repo root for reference implementations.
+
+    Key code conventions enforced by CI:
+
+    - Import `demistomock as demisto` at the top of every integration/script.
+    - Import `from CommonServerPython import *` — it is injected at runtime and must be present.
+    - Use `demisto.params()` for configuration values; use `demisto.args()` for command arguments.
+    - Return results with `return_results(CommandResults(...))`.
+    - Use `return_error("message")` for user-facing errors.
+    - Use `demisto.debug()` and `demisto.info()` for logging — never `print()`.
+    - Always include type hints; `mypy` is enforced.
+  </Step>
+
+  <Step title="Run demisto-sdk pre-commit">
+    Install the SDK and run the full pre-commit suite against your Pack before pushing:
+
+    ```bash
+    pip install demisto-sdk
+
+    # Lint, test, and validate a single Pack
+    demisto-sdk pre-commit -i Packs/MyPack/
+
+    # Auto-fix formatting issues
+    demisto-sdk format -i Packs/MyPack/
+
+    # Validate schema and metadata
+    demisto-sdk validate -i Packs/MyPack/
+    ```
+
+    Fix every error reported before continuing. See [Testing & Linting](/contributing/testing-and-linting) for a full breakdown of these commands.
+  </Step>
+
+  <Step title="Add release notes">
+    Generate a release notes template for your Pack:
+
+    ```bash
+    demisto-sdk update-release-notes -i Packs/MyPack/ -u minor
+    ```
+
+    Edit the generated file in `Packs/MyPack/ReleaseNotes/` to describe your changes clearly. PRs without release notes for content changes will fail CI. See [Release Notes](/contributing/release-notes) for full guidance.
+  </Step>
+
+  <Step title="Open a PR against master">
+    Push your branch and open a Pull Request against `demisto/content:master` on GitHub. Fill in the PR description template — describe what changed, which Pack is affected, and include any testing notes.
+
+    ```bash
+    git add .
+    git commit -m "feat(MyPack): add MyIntegration with fetch-incidents command"
+    git push origin feat/my-integration-name
+    ```
+  </Step>
+
+  <Step title="CI pipeline runs automated validation">
+    CircleCI automatically runs on every PR. The pipeline executes `demisto-sdk validate`, unit tests in Docker, linting, and schema checks. You can track the status directly on the PR page. Fix any failures by pushing additional commits to the same branch.
+  </Step>
+
+  <Step title="Code review by the XSOAR team">
+    A member of the Cortex XSOAR content team will review your PR. They may request changes to code style, test coverage, YAML structure, or documentation. Address feedback by pushing new commits — do not close and reopen the PR.
+  </Step>
+
+  <Step title="Merge and release">
+    Once approved and all CI checks pass, the XSOAR team merges the PR into `master`. The Pack version is bumped according to the release notes, and the updated content becomes available in the XSOAR Marketplace.
+  </Step>
+</Steps>
+
+## Development Environment
+
+The fastest way to get a fully configured environment is to use the provided VS Code dev container. If you have VS Code and Docker installed, click **Open in Remote-Containers** from the repo's README or use GitHub Codespaces to spin up a pre-configured cloud workspace with all recommended settings already applied.
+
+For a local setup, install the development dependencies via Poetry:
+
+```bash
+# Install Poetry (if not already installed)
+pip install poetry
+
+# Install all dev dependencies
+poetry install --with dev
+```
+
+Core dev dependencies defined in `pyproject.toml` include `demisto-sdk`, `pytest`, `requests-mock`, `pytest-mock`, `freezegun`, and `dateparser`.
+
+## Community Support
+
+Questions, ideas, and general discussion happen in the [DFIR Community Slack channel](https://www.demisto.com/community/). The Slack workspace is the best place to get informal feedback on a contribution idea before opening a formal design issue, to ask questions about platform conventions, or to connect with other contributors.
+
+<Tip>
+  The official Cortex XSOAR Content Developer Portal at [xsoar.pan.dev](https://xsoar.pan.dev/) is the authoritative source for platform documentation, including the full Content Contribution Guide and API references.
+</Tip>

@@ -1,0 +1,333 @@
+---
+title: "Integration YAML Schema Reference for Cortex XSOAR"
+sidebarTitle: "Integration YAML"
+description: "Complete schema reference for the Cortex XSOAR integration YAML configuration file — covering top-level fields, script block, parameters, commands, arguments, and outputs."
+---
+
+Every Cortex XSOAR integration is described by a YAML configuration file that lives alongside the Python implementation file in the integration's directory (e.g., `Packs/CortexXDR/Integrations/CortexXDRIR/CortexXDRIR.yml`). This file tells the XSOAR platform how to render the configuration UI, which commands the integration exposes, what arguments each command accepts, and what context data each command produces. The YAML is the authoritative contract between the integration developer and the platform.
+
+---
+
+## Top-Level Fields
+
+<ParamField path="name" type="string" required>
+  The internal identifier for the integration, used in scripts and automation rules to reference this integration. Must be unique across all installed integrations. Example: `"Cortex XDR - IR"`. Use kebab-case or space-separated words — no underscores.
+</ParamField>
+
+<ParamField path="display" type="string" required>
+  The human-readable display name shown in the XSOAR UI integration list and instance configuration page. Example: `"Palo Alto Networks Cortex XDR - Investigation and Response"`.
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  A description of what the integration does, shown in the integration detail panel and in the Marketplace. Example: `"Cortex XDR is the world's first detection and response app that natively integrates network, endpoint, and cloud data to stop sophisticated attacks."`.
+</ParamField>
+
+<ParamField path="category" type="string" required>
+  The integration category, matching a valid Marketplace category. Example: `"Endpoint"`.
+</ParamField>
+
+<ParamField path="image" type="string">
+  Relative path to the integration logo image file. Conventionally set to the image embedded in the YAML as a Base64 data URI or referenced as a file path.
+</ParamField>
+
+<ParamField path="isfetch" type="bool" default="false">
+  Set to `true` when the integration implements the `fetch-incidents` command to pull events from the vendor and create XSOAR incidents automatically.
+</ParamField>
+
+<ParamField path="isremotesyncin" type="bool" default="false">
+  Set to `true` when the integration supports incoming mirroring — pulling updates from the remote system into XSOAR incidents.
+</ParamField>
+
+<ParamField path="isremotesyncout" type="bool" default="false">
+  Set to `true` when the integration supports outgoing mirroring — pushing XSOAR incident updates back to the remote system.
+</ParamField>
+
+---
+
+## `configuration` Section
+
+The `configuration` array defines the parameters that appear in the integration instance configuration page. Each parameter maps to a key accessible via `demisto.params()` at runtime.
+
+```yaml
+configuration:
+- name: url
+  display: 'Server URL (copy URL from XDR)'
+  type: 0
+  section: Connect
+  required: true
+
+- displaypassword: API Key
+  name: apikey_creds
+  type: 9
+  section: Connect
+  required: false
+  hiddenusername: true
+
+- display: Trust any certificate (not secure)
+  name: insecure
+  type: 8
+  section: Connect
+  advanced: true
+  required: false
+
+- display: Use system proxy settings
+  name: proxy
+  type: 8
+  section: Connect
+  advanced: true
+  required: false
+```
+
+### Parameter Fields
+
+<ParamField path="name" type="string" required>
+  The parameter key used to retrieve the value at runtime with `demisto.params().get('name')`. Must be a valid Python identifier (no spaces).
+</ParamField>
+
+<ParamField path="display" type="string">
+  The label displayed next to the input field in the instance configuration UI.
+</ParamField>
+
+<ParamField path="displaypassword" type="string">
+  For type `9` (Authentication / Credentials) parameters — the label for the password/token field. The username field label is set by `display`; when `hiddenusername: true` the username field is hidden entirely.
+</ParamField>
+
+<ParamField path="type" type="integer" required>
+  Controls the input widget rendered in the UI. Valid values:
+
+  | Value | Widget | Python Type |
+  |---|---|---|
+  | `0` | Short text input | `str` |
+  | `4` | Encrypted / password input (stored encrypted) | `str` |
+  | `8` | Boolean checkbox | `bool` |
+  | `9` | Authentication credential pair (username + password) | `dict` with `identifier` and `password` keys |
+  | `12` | Single-select dropdown | `str` |
+  | `13` | Incident type selector | `str` |
+  | `15` | Single-select dropdown with `options` list | `str` |
+  | `16` | Multi-select dropdown with `options` list | `list[str]` |
+  | `17` | Short text (expiration) | `str` |
+  | `19` | Fetch interval (numeric minutes) | `str` |
+</ParamField>
+
+<ParamField path="required" type="bool" default="false">
+  When `true`, the platform prevents saving the instance configuration if this field is empty.
+</ParamField>
+
+<ParamField path="defaultvalue" type="string">
+  The pre-filled default value shown when the instance is first configured.
+</ParamField>
+
+<ParamField path="additionalinfo" type="string">
+  Help text displayed below the field in the configuration UI.
+</ParamField>
+
+<ParamField path="section" type="string">
+  Groups parameters into collapsible sections. Common values: `"Connect"`, `"Collect"`. The section order is controlled by the top-level `sectionorder` field.
+</ParamField>
+
+<ParamField path="advanced" type="bool">
+  When `true`, the parameter is hidden under an **Advanced** disclosure in the configuration UI.
+</ParamField>
+
+<ParamField path="options" type="array">
+  For `type: 15` (single-select) and `type: 16` (multi-select) parameters — the list of allowed values.
+</ParamField>
+
+<ParamField path="hidden" type="array">
+  A list of marketplace identifiers for which this parameter should be hidden. Example: `['marketplacev2', 'platform']`.
+</ParamField>
+
+---
+
+## `script` Block
+
+The `script` block describes the integration's runtime environment and exposes its commands.
+
+```yaml
+script:
+  type: python
+  subtype: python3
+  dockerimage: demisto/python3:3.12.14.12844876
+  isfetch: true
+  isremotesyncin: true
+  isremotesyncout: true
+  commands:
+    - ...
+```
+
+<ParamField path="script.type" type="string" required>
+  Runtime type. Always `'python'` for Python integrations. Also valid: `'javascript'`, `'powershell'`.
+</ParamField>
+
+<ParamField path="script.subtype" type="string">
+  Python version. Must be `'python3'` for all new integrations. Legacy integrations may use `'python2'`.
+</ParamField>
+
+<ParamField path="script.dockerimage" type="string" required>
+  The fully qualified Docker image reference used to run the integration, for example `'demisto/python3:3.12.14.12844876'`. The image tag must be pinned to a specific version — do not use `latest`.
+</ParamField>
+
+<ParamField path="script.isfetch" type="bool">
+  Mirrors the top-level `isfetch` flag. Indicates that the `fetch-incidents` command is implemented in the script block.
+</ParamField>
+
+<ParamField path="script.commands" type="array">
+  Array of command definition objects. See [Command Definition](#command-definition) below.
+</ParamField>
+
+---
+
+## Command Definition
+
+Each entry in `script.commands` defines one XSOAR command exposed by the integration.
+
+<ParamField path="name" type="string" required>
+  The kebab-case command name used to invoke the command in the War Room and in automations, for example `'xdr-get-incidents'`. By convention: `<vendor-prefix>-<verb>-<noun>`.
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  A human-readable description of what the command does. Displayed in the command reference panel and the Playground autocomplete.
+</ParamField>
+
+<ParamField path="deprecated" type="bool">
+  When `true`, marks the command as deprecated in the UI and prevents it from appearing in new playbook steps.
+</ParamField>
+
+<ParamField path="arguments" type="array">
+  Array of argument definition objects. See [Argument Definition](#argument-definition) below.
+</ParamField>
+
+<ParamField path="outputs" type="array">
+  Array of output definition objects describing the context paths written by this command. See [Output Definition](#output-definition) below.
+</ParamField>
+
+---
+
+## Argument Definition
+
+<ParamField path="name" type="string" required>
+  The argument name accessible via `demisto.args().get('name')` at runtime.
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  Help text displayed in the command arguments panel.
+</ParamField>
+
+<ParamField path="required" type="bool" default="false">
+  When `true`, the platform rejects the command invocation if this argument is not provided.
+</ParamField>
+
+<ParamField path="isArray" type="bool" default="false">
+  When `true`, the argument accepts a comma-separated list of values, which XSOAR presents as a multi-value input. Accessible as a list via `argToList(args.get('name'))`.
+</ParamField>
+
+<ParamField path="default" type="bool" default="false">
+  When `true`, this argument receives the value of any un-named positional input in the War Room command bar.
+</ParamField>
+
+<ParamField path="defaultValue" type="string">
+  The default value used when the argument is not supplied.
+</ParamField>
+
+<ParamField path="predefined" type="array">
+  A list of allowed string values. When provided, the UI renders a dropdown instead of a free-text input. Use `auto: PREDEFINED` to enforce the list strictly.
+</ParamField>
+
+<ParamField path="auto" type="string">
+  When set to `PREDEFINED`, the platform validates that the supplied value is one of the `predefined` values.
+</ParamField>
+
+---
+
+## Output Definition
+
+<ParamField path="contextPath" type="string" required>
+  The dot-notation path where this value is stored in the incident context, for example `'PaloAltoNetworksXDR.Incident.incident_id'`. Must match the `outputs_prefix` + field name used in `CommandResults`.
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  Human-readable description of what this output field contains.
+</ParamField>
+
+<ParamField path="type" type="string">
+  The data type of the output value. Valid values: `String`, `Number`, `Boolean`, `Date`, `Unknown`.
+</ParamField>
+
+---
+
+## Complete Command Example
+
+The following YAML snippet shows a complete command definition from the CortexXDRIR integration:
+
+```yaml
+script:
+  type: python
+  subtype: python3
+  dockerimage: demisto/python3:3.12.14.12844876
+  isfetch: true
+  isremotesyncin: true
+  isremotesyncout: true
+  commands:
+  - name: xdr-get-incidents
+    description: |-
+      Returns a list of incidents, which you can filter by a list of incident IDs (max. 100),
+      the time the incident was last modified, and the time the incident was created.
+      If you pass multiple filtering arguments, they will be concatenated using the AND condition.
+    arguments:
+    - name: lte_creation_time
+      description: >-
+        A date in the format 2019-12-31T23:59:00 in UTC.
+        Only incidents that were created on or before the specified date/time will be retrieved.
+    - name: gte_creation_time
+      description: >-
+        A date in the format 2019-12-31T23:59:00 in UTC.
+        Only incidents that were created on or after the specified date/time will be retrieved.
+    - name: incident_id_list
+      description: An array or CSV string of incident IDs.
+      isArray: true
+    - name: sort_by_creation_time
+      description: >-
+        Sorts returned incidents by the date/time that the incident was created
+        ("asc" - ascending, "desc" - descending).
+      auto: PREDEFINED
+      predefined:
+      - asc
+      - desc
+    - name: limit
+      description: Maximum number of incidents to return per page.
+      defaultValue: '100'
+    outputs:
+    - contextPath: PaloAltoNetworksXDR.Incident.incident_id
+      description: Unique ID assigned to each returned incident.
+      type: String
+    - contextPath: PaloAltoNetworksXDR.Incident.severity
+      description: >-
+        Calculated severity of the incident.
+        Valid values are: "low", "medium", "high".
+      type: String
+    - contextPath: PaloAltoNetworksXDR.Incident.status
+      description: >-
+        Current status of the incident.
+        Valid values are: "new", "under_investigation", "resolved_known_issue",
+        "resolved_false_positive", "resolved_true_positive",
+        "resolved_security_testing", "resolved_other", "resolved_auto".
+      type: String
+    - contextPath: PaloAltoNetworksXDR.Incident.description
+      description: Description of the incident.
+      type: String
+    - contextPath: PaloAltoNetworksXDR.Incident.creation_time
+      description: Date and time the incident was created on Cortex XDR.
+      type: date
+    - contextPath: PaloAltoNetworksXDR.Incident.modification_time
+      description: Date and time that the incident was last modified.
+      type: date
+    - contextPath: PaloAltoNetworksXDR.Incident.alert_count
+      description: Total number of alerts in the incident.
+      type: Number
+    - contextPath: PaloAltoNetworksXDR.Incident.host_count
+      description: Number of hosts involved in the incident.
+      type: Number
+    - contextPath: PaloAltoNetworksXDR.Incident.xdr_url
+      description: A link to the incident view on Cortex XDR.
+      type: String
+```

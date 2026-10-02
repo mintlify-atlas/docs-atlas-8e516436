@@ -1,0 +1,107 @@
+---
+title: "Building Cortex XSOAR Integrations: Architecture Overview"
+sidebarTitle: "Overview"
+description: "Cortex XSOAR integrations connect the platform to external products via commands. Each integration has a YAML config and Python implementation running in an isolated Docker container."
+---
+
+Cortex XSOAR integrations are the bridge between the XSOAR platform and the external security products in your environment. Each integration exposes product capabilities as named commands, returns human-readable output for analysts in the War Room, stores machine-readable data in the incident context for downstream playbook use, and runs inside an isolated Docker container so that dependencies never conflict across integrations.
+
+## What an Integration Is
+
+An integration is a self-contained unit of automation that wraps an external API. When a user or playbook calls `!vendor-get-alert alert_id=123`, XSOAR:
+
+1. Looks up the integration that owns the `vendor-get-alert` command.
+2. Spins up (or reuses) the integration's Docker container.
+3. Executes the Python script, passing the command name and arguments.
+4. Receives a `CommandResults` object back, renders it as a War Room entry, and stores the structured output in the incident context.
+
+Integrations are **stateless** — each invocation is completely independent. No in-memory state persists between calls; use `demisto.setLastRun()` / `demisto.getLastRun()` for the limited state needed by fetch-incidents.
+
+## The Two Required Files
+
+Every integration consists of exactly two files stored together in `Packs/<PackName>/Integrations/<IntegrationName>/`:
+
+| File | Purpose |
+|---|---|
+| `IntegrationName.yml` | Declares the integration's identity, configuration parameters, command signatures, argument definitions, and output schemas. XSOAR reads this file to render the configuration UI and validate inputs. |
+| `IntegrationName.py` | Implements the commands in Python. Imports `demistomock` and `CommonServerPython`, defines a `Client(BaseClient)` subclass, implements command functions, and dispatches in `main()`. |
+
+A `README.md` and a `_test.py` file are also expected for every integration but are not strictly required to run.
+
+## Integration Categories
+
+When designing an integration, identify which category best describes the external product. The category is declared in the top-level `category` field of the YAML file and determines where the integration appears in the XSOAR marketplace. The supported categories are:
+
+- **Analytics & SIEM** — Log aggregation and security information/event management platforms
+- **Authentication** — Identity providers, MFA, and access management systems
+- **Case Management** — Ticketing and incident tracking systems
+- **Data Enrichment & Threat Intelligence** — Indicator lookup, threat feeds, and enrichment services
+- **Email Gateway** — Email security and mail flow platforms
+- **Endpoint** — EDR, EPP, and endpoint management tools
+- **Forensics & Malware** — Sandbox analysis, reverse engineering, and forensic platforms
+- **Network Security** — Firewalls, IDS/IPS, and network traffic analysis tools
+- **Vulnerability Management** — Scanner platforms and vulnerability databases
+
+## The Execution Lifecycle
+
+Understanding the end-to-end flow helps you write integrations that behave correctly in all scenarios.
+
+<Steps>
+  <Step title="Command Triggered">
+    A user types `!myvendor-get-alert alert_id=42` in the War Room, or a playbook task calls the same command. XSOAR resolves which integration instance handles `myvendor-get-alert`.
+  </Step>
+  <Step title="Docker Container Started">
+    XSOAR starts the Docker image declared in the integration YAML (`script.dockerimage`). All Python dependencies declared in that image are available — no `pip install` is run at runtime.
+  </Step>
+  <Step title="Script Executed">
+    XSOAR injects `demistomock` and `CommonServerPython` into the runtime, then executes the `.py` file. The `if __name__ == 'builtins': main()` guard fires, triggering `main()`.
+  </Step>
+  <Step title="Parameters and Arguments Read">
+    Inside `main()`, `demisto.params()` returns the instance configuration (API key, server URL, proxy settings), and `demisto.args()` returns the arguments for the specific command invocation.
+  </Step>
+  <Step title="Command Function Dispatched">
+    `main()` checks `demisto.command()` and routes execution to the correct command function (e.g., `get_alert_command`). That function calls `Client._http_request()` and processes the response.
+  </Step>
+  <Step title="CommandResults Returned">
+    The command function returns a `CommandResults` object. `return_results()` serialises it and passes it back to XSOAR, which writes the human-readable output to the War Room and stores the structured data in the incident context.
+  </Step>
+</Steps>
+
+## Stateless Execution
+
+Integrations must be stateless. Every execution is independent — there is no shared memory, no global variables that persist between runs, and no filesystem state that survives container restarts. This design ensures that integrations scale safely and behave predictably.
+
+The only sanctioned mechanism for carrying state across runs is `demisto.setLastRun()` and `demisto.getLastRun()`, which are used exclusively by fetch-incidents to track the last fetched timestamp or ID.
+
+## Sub-Pages
+
+<CardGroup cols={2}>
+  <Card
+    title="YAML Configuration"
+    icon="file-code"
+    href="/integrations/yaml-configuration"
+  >
+    Define instance parameters, command signatures, arguments, output schemas, and the Docker image.
+  </Card>
+  <Card
+    title="Python Code"
+    icon="python"
+    href="/integrations/python-code"
+  >
+    Structure your `.py` file: imports, Client class, command functions, and the main dispatcher.
+  </Card>
+  <Card
+    title="BaseClient"
+    icon="network-wired"
+    href="/integrations/baseclient"
+  >
+    Use `BaseClient` for all HTTP requests — proxy support, SSL verification, and consistent error handling included.
+  </Card>
+  <Card
+    title="Commands & Outputs"
+    icon="terminal"
+    href="/integrations/commands-and-outputs"
+  >
+    Return `CommandResults` to populate the War Room and store machine-readable data in the incident context.
+  </Card>
+</CardGroup>

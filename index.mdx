@@ -1,20 +1,64 @@
 ---
-title: "Introduction"
-description: "Welcome to your project"
+title: "Cortex XSOAR Content: Security Automation at Scale"
+sidebarTitle: "Home"
+description: "The official content repository for Cortex XSOAR — 1,300+ Packs with Integrations, Playbooks, and Scripts to automate your Security Operations."
 ---
 
-Write a short description of your product here. What it does, who it's for, and what they can accomplish with it.
+Cortex XSOAR Content is the open-source repository powering security automation for thousands of SOC teams worldwide. It provides a growing library of **1,300+ Packs** — each containing Integrations, Playbooks, and Scripts that connect your security tooling and automate incident response workflows on the Cortex XSOAR platform.
 
-<Tip>
-  Ready to make this your own? Start by editing this page. Update your `docs.json` file to customize your site. Then fill out the [Quickstart](/quickstart) page.
-</Tip>
+<CardGroup cols={2}>
+  <Card title="Introduction" icon="book-open" href="/introduction">
+    Understand the repository structure, key concepts, and how Packs, Integrations, and Playbooks fit together.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Set up your development environment and build your first Integration in under 30 minutes.
+  </Card>
+  <Card title="Building Integrations" icon="plug" href="/integrations/overview">
+    Learn how to create Python integrations using BaseClient, CommandResults, and the demisto-sdk.
+  </Card>
+  <Card title="Playbooks & Scripts" icon="diagram-project" href="/playbooks/overview">
+    Design automated response workflows and utility scripts for your security operations.
+  </Card>
+  <Card title="Core Concepts" icon="lightbulb" href="/concepts/context-and-outputs">
+    Dive into incident fetching, DBotScore, context outputs, and Docker image management.
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/contributing/guide">
+    Submit your own Packs, Integrations, and Playbooks to the community content repository.
+  </Card>
+</CardGroup>
 
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  This card links to the quickstart page in your project.
-</Card>
-<Card title="Components" icon="puzzle-piece" href="https://mintlify.com/docs/components">
-  Add cards, callouts, steps, tabs, and more to design and structure your pages.
-</Card>
-<Card title="Settings" icon="gear" href="https://mintlify.com/docs/organize/settings">
-  Set your site name, branding, and navigation in the `docs.json` file.
-</Card>
+## Get Up and Running
+
+<Steps>
+  <Step title="Set up your environment">
+    Install the `demisto-sdk` and clone the repository. The SDK provides all tooling for linting, formatting, validation, and running tests.
+    ```bash
+    pip install demisto-sdk
+    git clone https://github.com/demisto/content.git
+    cd content
+    ```
+  </Step>
+  <Step title="Explore existing Packs">
+    Browse the `Packs/` directory to understand the structure. Each Pack follows a standard layout with `Integrations/`, `Playbooks/`, `Scripts/`, and `pack_metadata.json`.
+  </Step>
+  <Step title="Build your Integration">
+    Copy an integration template from `Templates/Integrations/`, implement your commands using `BaseClient` and `CommandResults`, then define the interface in a YAML configuration file.
+  </Step>
+  <Step title="Validate and contribute">
+    Run `demisto-sdk pre-commit -i Packs/YourPack/` to lint, test, and validate your content, then open a Pull Request to share it with the community.
+  </Step>
+</Steps>
+
+## Explore by Category
+
+<CardGroup cols={3}>
+  <Card title="Reference" icon="brackets-curly" href="/reference/common-server-python">
+    Full API reference for CommonServerPython, BaseClient, CommandResults, and Pack YAML schemas.
+  </Card>
+  <Card title="Pack Structure" icon="folder-tree" href="/pack-structure">
+    Understand how Packs are organized and what files every entity requires.
+  </Card>
+  <Card title="Incident Fetching" icon="arrows-rotate" href="/concepts/incident-fetching">
+    Configure integrations to pull incidents from external products into XSOAR automatically.
+  </Card>
+</CardGroup>

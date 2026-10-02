@@ -1,0 +1,223 @@
+---
+title: "BaseClient: HTTP Requests in Cortex XSOAR Integrations"
+sidebarTitle: "BaseClient"
+description: "BaseClient is the standard HTTP abstraction for XSOAR integrations. Inherit from it to get proxy support, SSL verification, retry logic, and consistent error handling."
+---
+
+`BaseClient` is the HTTP foundation of every Cortex XSOAR integration. It wraps the `requests` library with all the plumbing that integrations need: system proxy support, SSL certificate verification control, configurable ok-status codes, session reuse, and a uniform error format. Every integration that makes HTTP calls must define a `Client` subclass that inherits from `BaseClient` — you never instantiate `BaseClient` directly.
+
+<Warning>
+  Do not use `BaseClient` directly in your command logic. Create a `Client` subclass and call `self._http_request()` from instance methods only. The design pattern enforces a clean separation: `Client` methods translate Python arguments into HTTP calls; command functions translate HTTP responses into `CommandResults`.
+</Warning>
+
+## Subclassing BaseClient
+
+```python
+from CommonServerPython import *
+
+class Client(BaseClient):
+    """All HTTP methods live here. No business logic."""
+
+    def get_alert(self, alert_id: str) -> dict:
+        return self._http_request('GET', 'alerts', params={'alertId': alert_id})
+
+    def create_alert(self, title: str, severity: str) -> dict:
+        return self._http_request('POST', 'alerts', json_data={'title': title, 'severity': severity})
+```
+
+## Constructor Parameters
+
+Instantiate your `Client` subclass inside `main()` after reading `demisto.params()`:
+
+```python
+client = Client(
+    base_url='https://example.com/api/v2/',
+    verify=True,
+    proxy=False,
+    ok_codes=(200, 201, 204),
+    headers={'Authorization': 'Bearer <TOKEN>'},
+    auth=None,
+)
+```
+
+<ParamField path="base_url" type="str" required>
+  Base server address including any path prefix, for example `https://example.com/api/v2/`. All `url_suffix` values passed to `_http_request` are appended to this string.
+</ParamField>
+
+<ParamField path="verify" type="bool" default="True">
+  Whether the request should verify the server's SSL certificate. Pass `not params.get('insecure', False)` to honour the instance's "Trust any certificate" checkbox.
+</ParamField>
+
+<ParamField path="proxy" type="bool" default="False">
+  Whether to route requests through the system proxy. Pass `params.get('proxy', False)` to honour the instance's "Use system proxy settings" checkbox. When `False`, `BaseClient` explicitly removes any proxy environment variables from the request.
+</ParamField>
+
+<ParamField path="ok_codes" type="tuple" default="tuple()">
+  HTTP status codes that are considered successful. For example `(200, 201, 204)`. If you pass an empty tuple (the default), `BaseClient` uses `requests.Response.ok` (status codes 200–299). Any response whose status is not in `ok_codes` raises a `DemistoException` with the response body.
+</ParamField>
+
+<ParamField path="headers" type="dict" default="None">
+  Default headers sent with every request, for example `{'Accept': 'application/json', 'Authorization': 'Bearer TOKEN'}`. Per-request headers passed to `_http_request` override these.
+</ParamField>
+
+<ParamField path="auth" type="dict or tuple" default="None">
+  The `requests`-compatible auth parameter for HTTP Basic/Digest authentication, for example `('username', 'password')`. Per-request `auth` values passed to `_http_request` override this.
+</ParamField>
+
+## Class-Level Timeout Constants
+
+`BaseClient` defines two class-level constants that you can reference in your integration:
+
+```python
+class BaseClient(object):
+    REQUESTS_TIMEOUT = 60          # Default connection timeout in seconds
+    TIME_SENSITIVE_TOTAL_TIMEOUT = 15  # Hard deadline for time-sensitive commands
+```
+
+The effective timeout is resolved at initialisation time from (in priority order): the `REQUESTS_TIMEOUT.<IntegrationName>` environment variable, the `REQUESTS_TIMEOUT` environment variable, and finally the `timeout` constructor argument (which defaults to `REQUESTS_TIMEOUT`).
+
+## The `_http_request` Method
+
+`_http_request` is the single method you call from all `Client` instance methods. It handles proxy configuration, SSL settings, error formatting, and response parsing based on the `resp_type` argument.
+
+<ParamField path="method" type="str" required>
+  The HTTP method: `'GET'`, `'POST'`, `'PUT'`, `'DELETE'`, `'PATCH'`, etc.
+</ParamField>
+
+<ParamField path="url_suffix" type="str" required>
+  The API endpoint path appended to `self._base_url`, for example `'alerts'` or `'incidents/42/comments'`.
+</ParamField>
+
+<ParamField path="full_url" type="str" default="None">
+  When provided, bypasses `self._base_url + url_suffix` entirely. Use this when you need to call an address outside the integration's configured API scope.
+</ParamField>
+
+<ParamField path="headers" type="dict" default="None">
+  Per-request headers. When provided, these are merged with or override `self._headers`. When `None`, `self._headers` are used.
+</ParamField>
+
+<ParamField path="auth" type="tuple" default="None">
+  Per-request Basic/Digest auth credentials `(username, password)`. When `None`, `self._auth` is used.
+</ParamField>
+
+<ParamField path="params" type="dict" default="None">
+  URL query parameters appended to the request URL, for example `{'limit': 50, 'severity': 'high'}`.
+</ParamField>
+
+<ParamField path="data" type="dict" default="None">
+  Form-encoded body data for POST requests. Use for `application/x-www-form-urlencoded` payloads.
+</ParamField>
+
+<ParamField path="json_data" type="dict" default="None">
+  A Python dict that is serialised to a JSON body and sent with `Content-Type: application/json`. Use this for modern REST APIs.
+</ParamField>
+
+<ParamField path="files" type="dict" default="None">
+  File objects for multipart/form-data file uploads, in the format accepted by `requests`.
+</ParamField>
+
+<ParamField path="timeout" type="float" default="None">
+  Connection timeout in seconds. When `None`, the instance timeout (resolved from environment variables or constructor) is used. The value can also be a tuple `(connect_timeout, read_timeout)`.
+</ParamField>
+
+<ParamField path="resp_type" type="str" default="'json'">
+  Controls how the response body is parsed and returned:
+  - `'json'` — parses and returns the response as a Python dict or list
+  - `'text'` — returns the response body as a plain string
+  - `'content'` — returns the raw bytes of the response body
+  - `'xml'` — parses the body and returns an `xml.etree.ElementTree.Element`
+  - `'response'` — returns the raw `requests.Response` object (useful for inspecting headers, status codes, or streaming)
+</ParamField>
+
+<ParamField path="ok_codes" type="tuple" default="None">
+  Per-request override for acceptable HTTP status codes. When `None`, the instance-level `ok_codes` are used.
+</ParamField>
+
+<ParamField path="return_empty_response" type="bool" default="False">
+  When `True`, a response with no body (e.g. HTTP 204) is returned as `None` rather than raising an error. Useful for delete operations that return no content.
+</ParamField>
+
+<ParamField path="retries" type="int" default="0">
+  Number of retry attempts on failure. When `0`, the request fails immediately on the first error. Retries are only attempted for methods `GET`, `POST`, and `PUT` when the response status is in `status_list_to_retry`.
+</ParamField>
+
+## Full Client Example
+
+The following `Client` class demonstrates both GET and POST usage, with proper type hints:
+
+```python
+import demistomock as demisto
+from CommonServerPython import *
+
+import urllib3
+urllib3.disable_warnings()
+
+
+class Client(BaseClient):
+    """HTTP wrapper for the MyVendor REST API."""
+
+    def get_alert(self, alert_id: str) -> dict:
+        """Retrieve a single alert by its ID.
+
+        Args:
+            alert_id: The unique identifier for the alert.
+
+        Returns:
+            Parsed JSON response dict.
+        """
+        return self._http_request(
+            method='GET',
+            url_suffix='alerts',
+            params={'alertId': alert_id},
+        )
+
+    def create_alert(
+        self,
+        title: str,
+        severity: str,
+        description: str | None = None,
+    ) -> dict:
+        """Create a new alert.
+
+        Args:
+            title: Short title for the alert.
+            severity: One of 'low', 'medium', 'high', 'critical'.
+            description: Optional long-form description.
+
+        Returns:
+            Parsed JSON response dict containing the created alert.
+        """
+        payload = assign_params(
+            title=title,
+            severity=severity,
+            description=description,
+        )
+        return self._http_request(
+            method='POST',
+            url_suffix='alerts',
+            json_data=payload,
+            ok_codes=(200, 201),
+        )
+
+
+def main() -> None:  # pragma: no cover
+    params = demisto.params()
+    client = Client(
+        base_url=params.get('url', '').rstrip('/') + '/api/v1/',
+        verify=not params.get('insecure', False),
+        proxy=params.get('proxy', False),
+        headers={
+            'Authorization': f'Bearer {params.get("apikey", "")}',
+            'Accept': 'application/json',
+        },
+    )
+    # ... command dispatch ...
+
+
+if __name__ == 'builtins':
+    main()
+```
+
+<Tip>
+  Use the `assign_params()` helper (from `CommonServerPython`) when building request bodies or query dicts. It automatically removes keys whose values are `None`, keeping payloads clean without manual `if` checks.
+</Tip>
